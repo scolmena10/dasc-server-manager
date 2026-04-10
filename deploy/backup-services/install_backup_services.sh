@@ -17,6 +17,8 @@ INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
 SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PACKAGE_DIR="$SCRIPT_DIR/package"
+
 SRC_BACKUP_SCRIPT="${SCRIPT_DIR}/backups_api.sh"
 SRC_SERVICES_SCRIPT="${SCRIPT_DIR}/servicios_api.sh"
 OPTIONAL_API_PUBKEY="${SCRIPT_DIR}/api_panel.pub"
