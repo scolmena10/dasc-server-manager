@@ -1,5 +1,3 @@
-# dasc-server-manager
-
 # DASC Server Manager - Manual de instalacion en maquinas virtuales
 
 ## 1. Objetivo
