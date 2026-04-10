@@ -5,11 +5,13 @@ APP_NAME="DASC Server Manager"
 SERVICE_NAME="dasc-api"
 APP_USER="${SUDO_USER:-$USER}"
 APP_GROUP="$APP_USER"
+PADRE_DIR="/opt/dasc"
 INSTALL_DIR="/opt/dasc/api"
 VENV_DIR="$INSTALL_DIR/venv"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PACKAGE_DIR="$SCRIPT_DIR/package"
 
 echo "==> Instalando ${APP_NAME}"
 echo "==> Usuario de ejecución: ${APP_USER}"
@@ -25,20 +27,17 @@ apt update
 apt install -y python3 python3-venv python3-pip openssh-client
 
 echo "==> Creando estructura destino"
+mkdir -p "$PADRE_DIR"
 mkdir -p "$INSTALL_DIR"
-mkdir -p "$INSTALL_DIR/templates"
-mkdir -p "$INSTALL_DIR/static"
 
 echo "==> Copiando archivos del proyecto"
-cp "$SCRIPT_DIR/main.py" "$INSTALL_DIR/main.py"
-cp "$SCRIPT_DIR/requirements.txt" "$INSTALL_DIR/requirements.txt"
-cp "$SCRIPT_DIR/config.env" "$INSTALL_DIR/config.env"
 
-rm -rf "$INSTALL_DIR/templates"
-rm -rf "$INSTALL_DIR/static"
+if [[ ! -d "$PACKAGE_DIR" ]]; then
+  echo "Error: No existe la carpeta package"
+  exit 1
+fi
 
-cp -r "$SCRIPT_DIR/templates" "$INSTALL_DIR/templates"
-cp -r "$SCRIPT_DIR/static" "$INSTALL_DIR/static"
+cp -r "$PACKAGE_DIR"/. "$INSTALL_DIR"
 
 echo "==> Ajustando permisos"
 chown -R "$APP_USER:$APP_GROUP" /opt/dasc
