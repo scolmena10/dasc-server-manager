@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DASC Service - Server Manager</title>
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+
+    <!-- ICONOS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body>
+
+<header class="header">
+    <a href="/" class="brand">
+        <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
+        <div class="brand-text">
+            <span class="brand-title">DASC Service</span>
+            <span class="brand-subtitle">Server Manager</span>
+        </div>
+    </a>
+
+    <h1>DASC Service</h1>
+
+    <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+        <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
+    </a>
+</header>
+
+<div class="layout">
+
+    <aside class="sidebar">
+        <h2>Menú</h2>
+
+        <nav class="menu">
+            <a href="/backups">
+                <i class="fa-solid fa-database"></i> Copias
+            </a>
+            <a href="/logs">
+                <i class="fa-solid fa-file-lines"></i> Logs
+            </a>
+            <a href="/servicios">
+                <i class="fa-solid fa-server"></i> Servicios
+            </a>
+            <a href="/documentacion">
+                <i class="fa-solid fa-book"></i> Documentación
+            </a>
+        </nav>
+
+        <div class="history">
+            <h3>Historial</h3>
+            <p><span class="dot ok"></span> Backup completo OK</p>
+            <p><span class="dot warn"></span> Incremental pendiente</p>
+            <p><span class="dot ok"></span> Logs consultados</p>
+        </div>
+    </aside>
+
+    <main class="main">
+
+        <div class="topbar">
+            <div>
+                <h2 class="page-title">Panel de Control</h2>
+                <p class="page-subtitle">Proyecto DASC Service</p>
+            </div>
+
+            <div class="status-pill">
+                <i class="fa-solid fa-shield-halved"></i>
+                Estado: <strong>Operativo</strong>
+            </div>
+        </div>
+
+        <section class="grid">
+
+            <!-- BACKUPS -->
+            <article class="card">
+                <div class="card-head">
+                    <div class="card-icon">
+                        <i class="fa-solid fa-database"></i>
+                    </div>
+                    <div class="card-title">
+                        <h3>Copias de Seguridad</h3>
+                        <p>Crea copias manualmente</p>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <a class="btn primary" href="/backups">
+                        <i class="fa-solid fa-box"></i> Backup completo
+                    </a>
+                    <a class="btn" href="/backups">
+                        <i class="fa-solid fa-rotate"></i> Backup incremental
+                    </a>
+                    <a class="btn" href="/backups">
+                        <i class="fa-solid fa-layer-group"></i> Backup diferencial
+                    </a>
+                </div>
+            </article>
+
+            <!-- LOGS -->
+            <article class="card">
+                <div class="card-head">
+                    <div class="card-icon">
+                        <i class="fa-solid fa-file-lines"></i>
+                    </div>
+                    <div class="card-title">
+                        <h3>Logs</h3>
+                        <p>Revisa registros del sistema</p>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <a class="btn primary" href="#" onclick="window.open(window.location.protocol + '//' + window.location.hostname + '/cacti/', '_blank'); return false;">
+                        <i class="fa-solid fa-eye"></i> Ver Cacti
+                    </a>
+                    <a class="btn ghost" href="/logs">
+                        <i class="fa-solid fa-chart-line"></i> Panel de logs
+                    </a>
+                </div>
+            </article>
+
+            <!-- SERVICIOS -->
+            <article class="card card-mini">
+                <div class="card-head">
+                    <div class="card-icon">
+                        <i class="fa-solid fa-server"></i>
+                    </div>
+                    <div class="card-title">
+                        <h3>Servicios</h3>
+                        <p>Gestiona servicios remotos</p>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <a class="btn" href="/servicios">
+                        <i class="fa-solid fa-gear"></i> Gestionar todos
+                    </a>
+                </div>
+            </article>
+
+        </section>
+
+    </main>
+
+</div>
+
+</body>
+</html>

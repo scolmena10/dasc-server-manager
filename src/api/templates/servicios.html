@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Servicios - DASC</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+
+  <!-- ICONOS -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body>
+
+<header class="header">
+  <a href="/" class="brand">
+    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo">
+    <div class="brand-text">
+      <span class="brand-title">DASC</span>
+      <span class="brand-subtitle">Server Manager</span>
+    </div>
+  </a>
+
+  <h1>Gestión de Servicios</h1>
+
+  <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo">
+  </a>
+</header>
+
+<div class="layout">
+
+  <aside class="sidebar">
+    <h2>Menú</h2>
+
+    <nav class="menu">
+      <a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>
+      <a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>
+      <a href="/servicios" class="active"><i class="fa-solid fa-server"></i> Servicios</a>
+      <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+    </nav>
+
+    <div class="history">
+      <h3>Historial</h3>
+      <p><span class="dot ok"></span> Servicios cargados</p>
+      <p><span class="dot warn"></span> Acciones pendientes</p>
+      <p><span class="dot ok"></span> Sistema operativo</p>
+    </div>
+  </aside>
+
+  <main class="main">
+
+  {% if msg %}
+    <div class="alert {% if ok == '1' %}success{% else %}error{% endif %}">
+      {{ msg }}
+    </div>
+  {% endif %}
+
+    <div class="topbar">
+      <div>
+        <h2 class="page-title">Servicios del sistema</h2>
+        <p class="page-subtitle">Inicia, detén o reinicia servicios (systemd)</p>
+      </div>
+
+      <div class="status-pill">
+        <i class="fa-solid fa-shield-halved"></i>
+        Estado: <strong>Operativo</strong>
+      </div>
+    </div>
+
+    <section class="card card-mini">
+
+      <div class="svc-table-wrap">
+        <table class="svc-table">
+          <thead>
+            <tr>
+              <th>Servicio</th>
+              <th>Estado</th>
+              <th class="right">Acciones</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {% for s in servicios %}
+            <tr>
+              <td>
+                <div class="svc-name">{{ s.nombre }}</div>
+              </td>
+
+              <td>
+                {% if s.estado == "active" %}
+                  <span class="svc-badge active">
+                    <i class="fa-solid fa-circle-check"></i> Activo
+                  </span>
+                {% else %}
+                  <span class="svc-badge inactive">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Inactivo
+                  </span>
+                {% endif %}
+              </td>
+
+              <td class="right">
+                <form method="POST" action="/servicios/accion" class="inline">
+                  <input type="hidden" name="service" value="{{ s.nombre }}">
+
+                  <button class="btn small" name="action" value="start" type="submit">
+                    <i class="fa-solid fa-play"></i> Start
+                  </button>
+
+                  <button class="btn small" name="action" value="stop" type="submit">
+                    <i class="fa-solid fa-stop"></i> Stop
+                  </button>
+
+                  <button class="btn small primary" name="action" value="restart" type="submit">
+                    <i class="fa-solid fa-rotate-right"></i> Restart
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+
+        </table>
+      </div>
+
+      <div class="card-foot">
+        <span class="meta"><i class="fa-regular fa-clock"></i> Actualiza recargando la página</span>
+        <span class="meta ok"><i class="fa-solid fa-circle-check"></i> MVP</span>
+      </div>
+
+    </section>
+
+  </main>
+
+</div>
+</body>
+</html>
