@@ -1,4 +1,3 @@
-\
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -18,9 +17,12 @@ SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$SCRIPT_DIR/package"
+OPTIONAL_API_PUBKEY="$SCRIPT_DIR/api_panel.pub"
 
-INSTALL_BACKUP_SCRIPT="/usr/local/bin/backups_api.sh"
-INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
+if [[ "$EUID" -ne 0 ]]; then
+  echo "ERROR: ejecuta este script con sudo."
+  exit 1
+fi
 
 if [[ ! -d "$PACKAGE_DIR" ]]; then
   echo "ERROR: no existe la carpeta package/"
@@ -36,19 +38,6 @@ if [[ ! -f "$PACKAGE_DIR/servicios_api.sh" ]]; then
   echo "ERROR: falta servicios_api.sh en package/"
   exit 1
 fi
-
-cp "$PACKAGE_DIR/backups_api.sh" "$INSTALL_BACKUP_SCRIPT"
-cp "$PACKAGE_DIR/servicios_api.sh" "$INSTALL_SERVICES_SCRIPT"
-
-OPTIONAL_API_PUBKEY="${SCRIPT_DIR}/api_panel.pub"
-
-if [[ "$EUID" -ne 0 ]]; then
-  echo "ERROR: ejecuta este script con sudo."
-  exit 1
-fi
-
-[[ -f "$SRC_BACKUP_SCRIPT" ]] || { echo "ERROR: falta backups_api.sh en ${SCRIPT_DIR}"; exit 1; }
-[[ -f "$SRC_SERVICES_SCRIPT" ]] || { echo "ERROR: falta servicios_api.sh en ${SCRIPT_DIR}"; exit 1; }
 
 echo "==> Instalando paquetes necesarios"
 apt update
@@ -67,12 +56,13 @@ mkdir -p "${BACKUP_DIR}"
 chown -R "${APP_USER}:${APP_GROUP}" "${APP_HOME}"
 chmod 700 "${APP_HOME}/.ssh"
 chmod 755 "${BACKUP_DIR}"
+chmod 755 "${APP_HOME}"
 
 echo "==> Instalando scripts administrativos"
-cp "${SRC_BACKUP_SCRIPT}" "${INSTALL_BACKUP_SCRIPT}"
-cp "${SRC_SERVICES_SCRIPT}" "${INSTALL_SERVICES_SCRIPT}"
-chown root:root "${INSTALL_BACKUP_SCRIPT}" "${INSTALL_SERVICES_SCRIPT}"
-chmod 755 "${INSTALL_BACKUP_SCRIPT}" "${INSTALL_SERVICES_SCRIPT}"
+cp "$PACKAGE_DIR/backups_api.sh" "$INSTALL_BACKUP_SCRIPT"
+cp "$PACKAGE_DIR/servicios_api.sh" "$INSTALL_SERVICES_SCRIPT"
+chown root:root "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
+chmod 755 "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
 
 echo "==> Creando /home/${APP_USER}/.my.cnf"
 cat > "${APP_HOME}/.my.cnf" <<EOF
@@ -94,9 +84,11 @@ visudo -cf "${SUDOERS_FILE}"
 if [[ -f "${OPTIONAL_API_PUBKEY}" ]]; then
   echo "==> Instalando clave pública opcional desde api_panel.pub"
   touch "${APP_HOME}/.ssh/authorized_keys"
-  grep -qxF "$(cat "${OPTIONAL_API_PUBKEY}")" "${APP_HOME}/.ssh/authorized_keys" || cat "${OPTIONAL_API_PUBKEY}" >> "${APP_HOME}/.ssh/authorized_keys"
   chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.ssh/authorized_keys"
   chmod 600 "${APP_HOME}/.ssh/authorized_keys"
+
+  grep -qxF "$(cat "${OPTIONAL_API_PUBKEY}")" "${APP_HOME}/.ssh/authorized_keys" || \
+    cat "${OPTIONAL_API_PUBKEY}" >> "${APP_HOME}/.ssh/authorized_keys"
 else
   echo "==> No se encontró api_panel.pub. Recuerda hacer ssh-copy-id desde la VM API."
 fi
@@ -107,7 +99,11 @@ ls -l "${INSTALL_BACKUP_SCRIPT}"
 ls -l "${INSTALL_SERVICES_SCRIPT}"
 ls -ld "${BACKUP_DIR}"
 sudo -u "${APP_USER}" test -f "${APP_HOME}/.my.cnf" && echo ".my.cnf OK"
-sudo -u "${APP_USER}" mysqldump --protocol=tcp --databases "${DB_NAME}" | head -n 5 || true
+if sudo -u "${APP_USER}" mysqldump --protocol=tcp --databases "${DB_NAME}" | head -n 5; then
+  echo "Prueba mysqldump OK"
+else
+  echo "AVISO: la prueba mysqldump ha fallado. Revisa DB_HOST, usuario o permisos."
+fi
 
 echo
 echo "============================================"
