@@ -19,8 +19,27 @@ SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$SCRIPT_DIR/package"
 
-SRC_BACKUP_SCRIPT="${SCRIPT_DIR}/backups_api.sh"
-SRC_SERVICES_SCRIPT="${SCRIPT_DIR}/servicios_api.sh"
+INSTALL_BACKUP_SCRIPT="/usr/local/bin/backups_api.sh"
+INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
+
+if [[ ! -d "$PACKAGE_DIR" ]]; then
+  echo "ERROR: no existe la carpeta package/"
+  exit 1
+fi
+
+if [[ ! -f "$PACKAGE_DIR/backups_api.sh" ]]; then
+  echo "ERROR: falta backups_api.sh en package/"
+  exit 1
+fi
+
+if [[ ! -f "$PACKAGE_DIR/servicios_api.sh" ]]; then
+  echo "ERROR: falta servicios_api.sh en package/"
+  exit 1
+fi
+
+cp "$PACKAGE_DIR/backups_api.sh" "$INSTALL_BACKUP_SCRIPT"
+cp "$PACKAGE_DIR/servicios_api.sh" "$INSTALL_SERVICES_SCRIPT"
+
 OPTIONAL_API_PUBKEY="${SCRIPT_DIR}/api_panel.pub"
 
 if [[ "$EUID" -ne 0 ]]; then
