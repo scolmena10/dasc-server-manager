@@ -561,30 +561,7 @@ sudo ./uninstall_backup_services.sh
 
 ---
 
-## 18. Estado funcional del MVP
-
-Actualmente el MVP demuestra:
-
-- login y sesión
-- control de accesos por permisos
-- ejecución de backups desde web
-- gestión remota de servicios
-- auditoría de eventos
-- integración visual con Cacti
-- despliegue por roles dentro de `deploy/`
-
-### Mejoras previstas para versiones posteriores
-
-- restauración desde panel
-- historial más avanzado de backups
-- backups incrementales y diferenciales reales más allá del flujo MVP
-- alertas y notificaciones
-- endurecimiento de seguridad
-- despliegue todavía más automatizado
-
----
-
-## 19. Resumen final
+## 18. Resumen final
 
 Si todo está correcto, el entorno queda así:
 
