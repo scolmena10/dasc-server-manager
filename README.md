@@ -2,11 +2,6 @@
 
 Panel web para la gestión centralizada de servidores, copias de seguridad, servicios y monitorización dentro del MVP del proyecto.
 
-> Este README está pensado para **sustituir el README actual del repositorio**, que todavía describe un flujo más manual basado en copiar ficheros por `scp`.  
-> La versión de este documento se adapta a la estructura real de `deploy/` y al modelo de instalación por roles del proyecto.
-
----
-
 ## 1. Descripción del proyecto
 
 DASC Server Manager es un panel web desarrollado con **FastAPI** para administrar un entorno distribuido compuesto por:
