@@ -45,9 +45,72 @@ mkdir -p "$INSTALL_DIR"
 echo "==> Copiando archivos del proyecto"
 cp -r "$PACKAGE_DIR"/. "$INSTALL_DIR"
 
-echo "==> Ajustando permisos"
+echo "==> Ajustando permisos iniciales"
 chown -R "$APP_USER:$APP_GROUP" /opt/dasc
 chmod 640 "$INSTALL_DIR/config.env"
+
+echo "==> Configurando credenciales del panel"
+if [[ -z "${PANEL_ADMIN_USER:-}" ]]; then
+  PANEL_ADMIN_USER="$(awk -F= '/^ADMIN_USER=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
+  PANEL_ADMIN_USER="${PANEL_ADMIN_USER:-admin}"
+fi
+
+if [[ -z "${PANEL_ADMIN_PASSWORD:-}" ]]; then
+  echo
+  read -rsp "Introduce la contraseña para el usuario ${PANEL_ADMIN_USER} del panel: " PANEL_ADMIN_PASSWORD
+  echo
+  read -rsp "Repite la contraseña para el usuario ${PANEL_ADMIN_USER}: " PANEL_ADMIN_PASSWORD_CONFIRM
+  echo
+  if [[ "$PANEL_ADMIN_PASSWORD" != "$PANEL_ADMIN_PASSWORD_CONFIRM" ]]; then
+    echo "ERROR: las contraseñas no coinciden."
+    exit 1
+  fi
+fi
+
+if [[ -z "$PANEL_ADMIN_PASSWORD" ]]; then
+  echo "ERROR: la contraseña del panel no puede estar vacía."
+  exit 1
+fi
+
+if [[ -z "${PANEL_SECRET_KEY:-}" ]]; then
+  PANEL_SECRET_KEY="$(python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(48))
+PY
+)"
+fi
+
+escape_sed() {
+  printf '%s' "$1" | sed -e 's/[\/&]/\\&/g'
+}
+
+ADMIN_USER_ESCAPED="$(escape_sed "$PANEL_ADMIN_USER")"
+ADMIN_PASSWORD_ESCAPED="$(escape_sed "$PANEL_ADMIN_PASSWORD")"
+SECRET_KEY_ESCAPED="$(escape_sed "$PANEL_SECRET_KEY")"
+
+if grep -q '^ADMIN_USER=' "$INSTALL_DIR/config.env"; then
+  sed -i "s/^ADMIN_USER=.*/ADMIN_USER=${ADMIN_USER_ESCAPED}/" "$INSTALL_DIR/config.env"
+else
+  echo "ADMIN_USER=${PANEL_ADMIN_USER}" >> "$INSTALL_DIR/config.env"
+fi
+
+if grep -q '^ADMIN_PASSWORD=' "$INSTALL_DIR/config.env"; then
+  sed -i "s/^ADMIN_PASSWORD=.*/ADMIN_PASSWORD=${ADMIN_PASSWORD_ESCAPED}/" "$INSTALL_DIR/config.env"
+else
+  echo "ADMIN_PASSWORD=${PANEL_ADMIN_PASSWORD}" >> "$INSTALL_DIR/config.env"
+fi
+
+if grep -q '^SECRET_KEY=' "$INSTALL_DIR/config.env"; then
+  sed -i "s/^SECRET_KEY=.*/SECRET_KEY=${SECRET_KEY_ESCAPED}/" "$INSTALL_DIR/config.env"
+else
+  echo "SECRET_KEY=${PANEL_SECRET_KEY}" >> "$INSTALL_DIR/config.env"
+fi
+
+chmod 600 "$INSTALL_DIR/config.env"
+chown "$APP_USER:$APP_GROUP" "$INSTALL_DIR/config.env"
+
+echo "==> Credenciales del panel actualizadas en config.env"
+echo "==> Usuario administrador del panel: ${PANEL_ADMIN_USER}"
 
 echo "==> Creando entorno virtual"
 sudo -u "$APP_USER" python3 -m venv "$VENV_DIR"
@@ -142,6 +205,7 @@ echo "============================================"
 echo "Instalación completada"
 echo "Panel instalado en: $INSTALL_DIR"
 echo "Servicio: $SERVICE_NAME"
+echo "Admin del panel: ${PANEL_ADMIN_USER}"
 echo "SSH automático configurado contra: $BACKUP_HOST"
 echo "URL local: http://127.0.0.1:8000"
 echo "URL red:   http://<IP_DEL_SERVIDOR>:8000"
