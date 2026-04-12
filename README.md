@@ -20,25 +20,7 @@ El objetivo del MVP es demostrar una solución funcional que permita:
 
 ---
 
-## 2. Qué cambia respecto al README antiguo
-
-El README que está subido ahora mismo en el repositorio se centra en una instalación manual en máquinas virtuales con pasos tipo `scp` de los scripts y paquetes a cada VM.
-
-Este README actualiza ese enfoque y lo sustituye por uno más limpio y profesional:
-
-- instalación desde el propio repositorio de GitHub
-- estructura explicada por carpetas dentro de `deploy/`
-- despliegue separado por rol:
-  - `deploy/api`
-  - `deploy/backup-services`
-  - `deploy/db`
-- explicación de las carpetas `package/`
-- validaciones finales por máquina
-- flujo más mantenible y más cercano a una instalación real reproducible
-
----
-
-## 3. Arquitectura del MVP
+## 2. Arquitectura del MVP
 
 La arquitectura del proyecto se despliega en **3 máquinas virtuales**:
 
@@ -65,7 +47,7 @@ Base de datos MariaDB/MySQL (192.168.60.20)
 
 ---
 
-## 4. Estructura actual del despliegue
+## 3. Estructura actual del despliegue
 
 La carpeta `deploy/` del repositorio está organizada por rol.
 
@@ -76,7 +58,7 @@ deploy/
 └── db/
 ```
 
-### 4.1 `deploy/api`
+### 3.1 `deploy/api`
 
 Contiene el instalador y desinstalador del panel web, junto con el paquete completo de la API.
 
@@ -94,7 +76,7 @@ deploy/api/
     └── static/
 ```
 
-### 4.2 `deploy/backup-services`
+### 3.2 `deploy/backup-services`
 
 Contiene el instalador y desinstalador del servidor que ejecuta backups y controla servicios por `systemd`.
 
@@ -109,7 +91,7 @@ deploy/backup-services/
     └── servicios_api.sh
 ```
 
-### 4.3 `deploy/db`
+### 3.3 `deploy/db`
 
 Contiene el instalador y desinstalador de MariaDB / MySQL del proyecto.
 
@@ -121,9 +103,9 @@ deploy/db/
 
 ---
 
-## 5. Requisitos previos
+## 4. Requisitos previos
 
-### 5.1 Software
+### 4.1 Software
 
 - VirtualBox, Isard o entorno equivalente de máquinas virtuales
 - Ubuntu Server 22.04 o 24.04
@@ -131,7 +113,7 @@ deploy/db/
 - conectividad de red entre las 3 máquinas
 - `git` instalado
 
-### 5.2 Recursos recomendados por VM
+### 4.2 Recursos recomendados por VM
 
 - **CPU**: 2 vCPU
 - **RAM**: 2 GB mínimo
@@ -140,7 +122,7 @@ deploy/db/
 
 ---
 
-## 6. Configuración de red recomendada
+## 5. Configuración de red recomendada
 
 Para laboratorio se recomienda esta configuración en **cada VM**:
 
@@ -177,7 +159,7 @@ ping -c 3 192.168.60.30
 
 ---
 
-## 7. Orden recomendado de instalación
+## 6. Orden recomendado de instalación
 
 Instalar siempre en este orden:
 
@@ -192,7 +174,7 @@ Este orden evita errores porque:
 
 ---
 
-## 8. Instalación desde GitHub
+## 7. Instalación desde GitHub
 
 En las tres máquinas:
 
@@ -204,7 +186,7 @@ git clone https://github.com/scolmena10/dasc-server-manager.git
 
 ---
 
-## 9. Instalación de la VM 2 - Base de datos
+## 8. Instalación de la VM 2 - Base de datos
 
 ### Máquina
 `192.168.60.20`
@@ -235,7 +217,7 @@ sudo mariadb -e "SELECT User, Host FROM mysql.user;"
 
 ---
 
-## 10. Instalación de la VM 3 - Backups + Servicios
+## 9. Instalación de la VM 3 - Backups + Servicios
 
 ### Máquina
 `192.168.60.30`
@@ -273,7 +255,7 @@ sudo -u dasc mysqldump --protocol=tcp --databases employees | head
 
 ---
 
-## 11. Instalación de la VM 1 - API / Panel web
+## 10. Instalación de la VM 1 - API / Panel web
 
 ### Máquina
 `192.168.60.10`
@@ -305,7 +287,7 @@ curl -I http://127.0.0.1:8000
 
 ---
 
-## 12. Configuración del panel
+## 11. Configuración del panel
 
 La API usa configuración por variables de entorno mediante `config.env`.
 
@@ -344,7 +326,7 @@ sudo nano /opt/dasc/api/config.env
 
 ---
 
-## 13. Cómo funciona la aplicación
+## 12. Cómo funciona la aplicación
 
 La API del panel:
 
@@ -361,26 +343,26 @@ La API del panel:
 
 ### Módulos funcionales del MVP
 
-#### 13.1 Login y sesión
+#### 12.1 Login y sesión
 - login con usuario administrador por variables de entorno
 - sesiones basadas en middleware
 - logout desde panel
 
-#### 13.2 Usuarios y permisos
+#### 12.2 Usuarios y permisos
 - usuarios adicionales desde `data/users.json`
 - permisos separados para:
   - `logs`
   - `backups`
   - `servicios`
 
-#### 13.3 Servicios
+#### 12.3 Servicios
 - listado remoto de servicios vía `servicios_api.sh`
 - acciones:
   - `start`
   - `stop`
   - `restart`
 
-#### 13.4 Backups
+#### 12.4 Backups
 - formulario de backup desde el panel
 - tipos disponibles:
   - `full`
@@ -395,14 +377,14 @@ La API del panel:
   - referencia base
   - notas
 
-#### 13.5 Logs
+#### 12.5 Logs
 - tabla de eventos desde base de datos
 - apertura de Cacti desde el panel
 - auditoría de acciones del sistema
 
 ---
 
-## 14. Acceso al panel
+## 13. Acceso al panel
 
 Una vez instalada la API:
 
@@ -417,9 +399,9 @@ Credenciales iniciales:
 
 ---
 
-## 15. Validaciones completas del entorno
+## 14. Validaciones completas del entorno
 
-### 15.1 Conectividad entre VMs
+### 14.1 Conectividad entre VMs
 
 Desde la API:
 
@@ -428,13 +410,13 @@ ping -c 3 192.168.60.20
 ping -c 3 192.168.60.30
 ```
 
-### 15.2 SSH desde la API hacia Backups + Servicios
+### 14.2 SSH desde la API hacia Backups + Servicios
 
 ```bash
 ssh dasc@192.168.60.30 "hostname && date"
 ```
 
-### 15.3 Estado del panel
+### 14.3 Estado del panel
 
 Abrir en navegador:
 
@@ -442,7 +424,7 @@ Abrir en navegador:
 http://192.168.60.10:8000
 ```
 
-### 15.4 Prueba de servicios
+### 14.4 Prueba de servicios
 
 Desde el panel, entrar en **Servicios** y probar:
 
@@ -450,7 +432,7 @@ Desde el panel, entrar en **Servicios** y probar:
 - `stop`
 - `restart`
 
-### 15.5 Prueba de backup
+### 14.5 Prueba de backup
 
 Desde el panel, entrar en **Copias** y lanzar un backup.
 
@@ -460,7 +442,7 @@ Después, comprobar en la VM `192.168.60.30`:
 ls -lah /home/dasc/backups
 ```
 
-### 15.6 Prueba de logs
+### 14.6 Prueba de logs
 
 Entrar en **Logs** y comprobar:
 
@@ -470,7 +452,7 @@ Entrar en **Logs** y comprobar:
 
 ---
 
-## 16. Rutas importantes del sistema
+## 15. Rutas importantes del sistema
 
 ### VM 1 - API
 
@@ -515,9 +497,9 @@ Entrar en **Logs** y comprobar:
 
 ---
 
-## 17. Troubleshooting
+## 16. Troubleshooting
 
-### 17.1 La API no arranca
+### 16.1 La API no arranca
 
 ```bash
 sudo systemctl status dasc-api --no-pager
@@ -525,14 +507,14 @@ sudo journalctl -u dasc-api -n 50 --no-pager
 ls -l /opt/dasc/api/venv/bin/uvicorn
 ```
 
-### 17.2 La API no llega por SSH a la VM de backups
+### 16.2 La API no llega por SSH a la VM de backups
 
 ```bash
 ssh dasc@192.168.60.30 "hostname"
 sudo systemctl status ssh --no-pager
 ```
 
-### 17.3 El backup falla
+### 16.3 El backup falla
 
 En la VM de backups:
 
@@ -542,7 +524,7 @@ ls -l /home/dasc/.my.cnf
 sudo -u dasc mysqldump --protocol=tcp --databases employees | head
 ```
 
-### 17.4 La DB no acepta conexiones remotas
+### 16.4 La DB no acepta conexiones remotas
 
 En la VM de DB:
 
@@ -554,7 +536,7 @@ sudo mariadb -e "SELECT User, Host FROM mysql.user;"
 
 ---
 
-## 18. Desinstalación
+## 17. Desinstalación
 
 ### API
 
@@ -579,7 +561,7 @@ sudo ./uninstall_backup_services.sh
 
 ---
 
-## 19. Estado funcional del MVP
+## 18. Estado funcional del MVP
 
 Actualmente el MVP demuestra:
 
@@ -602,7 +584,7 @@ Actualmente el MVP demuestra:
 
 ---
 
-## 20. Resumen final
+## 19. Resumen final
 
 Si todo está correcto, el entorno queda así:
 
