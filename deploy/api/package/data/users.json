@@ -1,0 +1,10 @@
+[
+  {
+    "username": "daniel",
+    "password": "daniel123",
+    "permissions": [
+      "logs",
+      "servicios"
+    ]
+  }
+]
