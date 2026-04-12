@@ -14,6 +14,7 @@ DB_BACKUP_PASS="${DB_BACKUP_PASS:-dasc_backup_2026}"
 INSTALL_BACKUP_SCRIPT="/usr/local/bin/backups_api.sh"
 INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
 SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
+SSHD_CONFIG="/etc/ssh/sshd_config"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$SCRIPT_DIR/package"
@@ -46,10 +47,48 @@ DEBIAN_FRONTEND=noninteractive apt install -y openssh-server mariadb-client sudo
 echo "==> Habilitando SSH"
 systemctl enable --now ssh
 
+if [[ -f "$SSHD_CONFIG" ]]; then
+  echo "==> Asegurando autenticación por contraseña y clave pública en SSH"
+  if grep -qE '^[#[:space:]]*PasswordAuthentication' "$SSHD_CONFIG"; then
+    sed -i -E 's|^[#[:space:]]*PasswordAuthentication[[:space:]]+.*|PasswordAuthentication yes|g' "$SSHD_CONFIG"
+  else
+    echo 'PasswordAuthentication yes' >> "$SSHD_CONFIG"
+  fi
+
+  if grep -qE '^[#[:space:]]*PubkeyAuthentication' "$SSHD_CONFIG"; then
+    sed -i -E 's|^[#[:space:]]*PubkeyAuthentication[[:space:]]+.*|PubkeyAuthentication yes|g' "$SSHD_CONFIG"
+  else
+    echo 'PubkeyAuthentication yes' >> "$SSHD_CONFIG"
+  fi
+
+  systemctl restart ssh
+fi
+
 echo "==> Creando usuario de servicio ${APP_USER}"
 if ! id "${APP_USER}" >/dev/null 2>&1; then
   useradd -m -s /bin/bash "${APP_USER}"
 fi
+
+if [[ -z "${APP_PASSWORD:-}" ]]; then
+  echo
+  read -rsp "Introduce la contraseña para ${APP_USER}: " APP_PASSWORD
+  echo
+  read -rsp "Repite la contraseña para ${APP_USER}: " APP_PASSWORD_CONFIRM
+  echo
+
+  if [[ "$APP_PASSWORD" != "$APP_PASSWORD_CONFIRM" ]]; then
+    echo "ERROR: las contraseñas no coinciden."
+    exit 1
+  fi
+fi
+
+if [[ -z "$APP_PASSWORD" ]]; then
+  echo "ERROR: la contraseña de ${APP_USER} no puede estar vacía."
+  exit 1
+fi
+
+echo "${APP_USER}:${APP_PASSWORD}" | chpasswd
+echo "==> Contraseña de ${APP_USER} configurada"
 
 mkdir -p "${APP_HOME}/.ssh"
 mkdir -p "${BACKUP_DIR}"
@@ -65,19 +104,19 @@ chown root:root "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
 chmod 755 "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
 
 echo "==> Creando /home/${APP_USER}/.my.cnf"
-cat > "${APP_HOME}/.my.cnf" <<EOF
+cat > "${APP_HOME}/.my.cnf" <<EOF2
 [client]
 user=${DB_BACKUP_USER}
 password=${DB_BACKUP_PASS}
 host=${DB_HOST}
-EOF
+EOF2
 chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.my.cnf"
 chmod 600 "${APP_HOME}/.my.cnf"
 
 echo "==> Configurando sudoers para controlar servicios sin contraseña"
-cat > "${SUDOERS_FILE}" <<EOF
+cat > "${SUDOERS_FILE}" <<EOF2
 ${APP_USER} ALL=(ALL) NOPASSWD: /usr/bin/systemctl start *, /usr/bin/systemctl stop *, /usr/bin/systemctl restart *, /usr/bin/systemctl status *, /usr/bin/systemctl is-active *
-EOF
+EOF2
 chmod 440 "${SUDOERS_FILE}"
 visudo -cf "${SUDOERS_FILE}"
 
@@ -86,11 +125,10 @@ if [[ -f "${OPTIONAL_API_PUBKEY}" ]]; then
   touch "${APP_HOME}/.ssh/authorized_keys"
   chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.ssh/authorized_keys"
   chmod 600 "${APP_HOME}/.ssh/authorized_keys"
-
   grep -qxF "$(cat "${OPTIONAL_API_PUBKEY}")" "${APP_HOME}/.ssh/authorized_keys" || \
     cat "${OPTIONAL_API_PUBKEY}" >> "${APP_HOME}/.ssh/authorized_keys"
 else
-  echo "==> No se encontró api_panel.pub. Recuerda hacer ssh-copy-id desde la VM API."
+  echo "==> No se encontró api_panel.pub. La API podrá copiar su clave automáticamente con sshpass."
 fi
 
 echo "==> Validaciones"
@@ -113,4 +151,5 @@ echo "DB_HOST=${DB_HOST}"
 echo "DB_NAME=${DB_NAME}"
 echo "Backups en: ${BACKUP_DIR}"
 echo "Scripts: ${INSTALL_BACKUP_SCRIPT} y ${INSTALL_SERVICES_SCRIPT}"
+echo "SSH listo para autenticación por contraseña y clave pública"
 echo "============================================"
