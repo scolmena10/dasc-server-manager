@@ -4,12 +4,45 @@
   <meta charset="UTF-8">
   <title>Servicios - DASC</title>
 
-  <!-- CSS -->
   <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
-
-  <!-- ICONOS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .logout-form {
+      margin: 0;
+    }
+
+    .logout-form button {
+      cursor: pointer;
+    }
+
+    .alert {
+      margin-bottom: 20px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .success {
+      background: #052e16;
+      color: #dcfce7;
+      border: 1px solid #166534;
+    }
+
+    .error {
+      background: #450a0a;
+      color: #fee2e2;
+      border: 1px solid #991b1b;
+    }
+  </style>
 </head>
 
 <body>
@@ -36,27 +69,21 @@
     <h2>Menú</h2>
 
     <nav class="menu">
-      <a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>
-      <a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>
-      <a href="/servicios" class="active"><i class="fa-solid fa-server"></i> Servicios</a>
       <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+      {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+      <a href="/servicios" class="active"><i class="fa-solid fa-server"></i> Servicios</a>
+      {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
     </nav>
-
-    <div class="history">
-      <h3>Historial</h3>
-      <p><span class="dot ok"></span> Servicios cargados</p>
-      <p><span class="dot warn"></span> Acciones pendientes</p>
-      <p><span class="dot ok"></span> Sistema operativo</p>
-    </div>
   </aside>
 
   <main class="main">
 
-  {% if msg %}
+    {% if msg %}
     <div class="alert {% if ok == '1' %}success{% else %}error{% endif %}">
       {{ msg }}
     </div>
-  {% endif %}
+    {% endif %}
 
     <div class="topbar">
       <div>
@@ -64,14 +91,21 @@
         <p class="page-subtitle">Inicia, detén o reinicia servicios (systemd)</p>
       </div>
 
-      <div class="status-pill">
-        <i class="fa-solid fa-shield-halved"></i>
-        Estado: <strong>Operativo</strong>
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <i class="fa-solid fa-user"></i>
+          Usuario: <strong>{{ user }}</strong>
+        </div>
+
+        <form method="post" action="/logout" class="logout-form">
+          <button type="submit" class="btn">
+            <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
+          </button>
+        </form>
       </div>
     </div>
 
     <section class="card card-mini">
-
       <div class="svc-table-wrap">
         <table class="svc-table">
           <thead>
@@ -120,16 +154,16 @@
               </td>
             </tr>
             {% endfor %}
+
+            {% if not servicios %}
+            <tr>
+              <td colspan="3" style="text-align:center;">No se pudieron cargar servicios.</td>
+            </tr>
+            {% endif %}
           </tbody>
 
         </table>
       </div>
-
-      <div class="card-foot">
-        <span class="meta"><i class="fa-regular fa-clock"></i> Actualiza recargando la página</span>
-        <span class="meta ok"><i class="fa-solid fa-circle-check"></i> MVP</span>
-      </div>
-
     </section>
 
   </main>

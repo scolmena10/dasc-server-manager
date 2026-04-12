@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Administración de usuarios - DASC</title>
+
+  <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <style>
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .logout-form {
+      margin: 0;
+    }
+
+    .alert {
+      margin-bottom: 20px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+
+    .success {
+      background: #052e16;
+      color: #dcfce7;
+      border: 1px solid #166534;
+    }
+
+    .error {
+      background: #450a0a;
+      color: #fee2e2;
+      border: 1px solid #991b1b;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .form-grid input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #fff;
+      box-sizing: border-box;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .perm-list {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    .perm-item {
+      background: #1e293b;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+    }
+
+    .actions-row {
+      margin-top: 18px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .inline-delete {
+      margin: 0;
+    }
+  </style>
+</head>
+
+<body>
+
+<header class="header">
+  <a href="/" class="brand">
+    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo">
+    <div class="brand-text">
+      <span class="brand-title">DASC</span>
+      <span class="brand-subtitle">Server Manager</span>
+    </div>
+  </a>
+
+  <h1>Administración de usuarios</h1>
+
+  <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo">
+  </a>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Menú</h2>
+
+    <nav class="menu">
+      <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+      {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+      {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
+      <a href="/admin/usuarios" class="active"><i class="fa-solid fa-user-shield"></i> Administración</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    {% if msg %}
+    <div class="alert {% if ok == '1' %}success{% else %}error{% endif %}">
+      {{ msg }}
+    </div>
+    {% endif %}
+
+    <div class="topbar">
+      <div>
+        <h2 class="page-title">Usuarios y permisos</h2>
+        <p class="page-subtitle">Crea cuentas y define accesos al panel</p>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="status-pill">
+          <i class="fa-solid fa-user"></i>
+          Usuario: <strong>{{ user }}</strong>
+        </div>
+
+        <form method="post" action="/logout" class="logout-form">
+          <button type="submit" class="btn">
+            <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-user-plus"></i></div>
+        <div class="card-title">
+          <h3>Crear nuevo usuario</h3>
+          <p>Asigna usuario, contraseña y permisos</p>
+        </div>
+      </div>
+
+      <form method="POST" action="/admin/usuarios">
+        <div class="form-grid">
+          <div class="field">
+            <label>Usuario</label>
+            <input type="text" name="username" required>
+          </div>
+
+          <div class="field">
+            <label>Contraseña</label>
+            <input type="text" name="password" required>
+          </div>
+        </div>
+
+        <div style="margin-top: 18px;">
+          <strong>Permisos:</strong>
+          <div class="perm-list">
+            {% for key, label in available_permissions.items() %}
+            <label class="perm-item">
+              <input type="checkbox" name="permissions" value="{{ key }}">
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="actions-row">
+          <button class="btn primary" type="submit">
+            <i class="fa-solid fa-floppy-disk"></i> Crear usuario
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card card-mini" style="margin-top: 20px;">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-users"></i></div>
+        <div class="card-title">
+          <h3>Usuarios creados</h3>
+          <p>Cuentas disponibles en el sistema</p>
+        </div>
+      </div>
+
+      <div class="svc-table-wrap">
+        <table class="svc-table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Permisos</th>
+              <th class="right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>admin</td>
+              <td>Todos</td>
+              <td class="right">No eliminable</td>
+            </tr>
+
+            {% for u in users %}
+            <tr>
+              <td>{{ u.username }}</td>
+              <td>
+                {% if u.permissions %}
+                  {{ ", ".join(u.permissions) }}
+                {% else %}
+                  Sin permisos
+                {% endif %}
+              </td>
+              <td class="right">
+                <form method="POST" action="/admin/usuarios/delete" class="inline-delete">
+                  <input type="hidden" name="username" value="{{ u.username }}">
+                  <button class="btn small" type="submit">
+                    <i class="fa-solid fa-trash"></i> Eliminar
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+
+            {% if not users %}
+            <tr>
+              <td colspan="3" style="text-align:center;">Todavía no hay usuarios creados.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+</body>
+</html>
