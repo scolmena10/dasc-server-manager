@@ -1,10 +1,51 @@
-# DASC Server Manager - Manual de instalacion en maquinas virtuales
+# DASC Server Manager
 
-## 1. Objetivo
+Panel web para la gestión centralizada de servidores, copias de seguridad, servicios y monitorización dentro del MVP del proyecto.
 
-Este documento describe la instalacion del **MVP de DASC Server Manager** en un entorno de **maquinas virtuales**.
+> Este README está pensado para **sustituir el README actual del repositorio**, que todavía describe un flujo más manual basado en copiar ficheros por `scp`.  
+> La versión de este documento se adapta a la estructura real de `deploy/` y al modelo de instalación por roles del proyecto.
 
-La arquitectura se despliega en **3 VMs separadas**:
+---
+
+## 1. Descripción del proyecto
+
+DASC Server Manager es un panel web desarrollado con **FastAPI** para administrar un entorno distribuido compuesto por:
+
+- un servidor de **API / panel web**
+- un servidor de **backups + gestión de servicios**
+- un servidor de **base de datos**
+- un sistema de **logs y monitorización**
+
+El objetivo del MVP es demostrar una solución funcional que permita:
+
+- lanzar copias de seguridad desde una interfaz web
+- gestionar servicios remotos
+- registrar eventos y accesos
+- centralizar la operación desde un panel único
+
+---
+
+## 2. Qué cambia respecto al README antiguo
+
+El README que está subido ahora mismo en el repositorio se centra en una instalación manual en máquinas virtuales con pasos tipo `scp` de los scripts y paquetes a cada VM.
+
+Este README actualiza ese enfoque y lo sustituye por uno más limpio y profesional:
+
+- instalación desde el propio repositorio de GitHub
+- estructura explicada por carpetas dentro de `deploy/`
+- despliegue separado por rol:
+  - `deploy/api`
+  - `deploy/backup-services`
+  - `deploy/db`
+- explicación de las carpetas `package/`
+- validaciones finales por máquina
+- flujo más mantenible y más cercano a una instalación real reproducible
+
+---
+
+## 3. Arquitectura del MVP
+
+La arquitectura del proyecto se despliega en **3 máquinas virtuales**:
 
 - **VM 1 - API / Panel web**: `192.168.60.10`
 - **VM 2 - Base de datos**: `192.168.60.20`
@@ -13,7 +54,7 @@ La arquitectura se despliega en **3 VMs separadas**:
 Flujo general del sistema:
 
 ```text
-Usuario/Navegador
+Usuario / Navegador
         |
         v
 API / Panel Web (192.168.60.10)
@@ -29,45 +70,95 @@ Base de datos MariaDB/MySQL (192.168.60.20)
 
 ---
 
-## 2. Requisitos previos
+## 4. Estructura actual del despliegue
 
-### 2.1 Software
+La carpeta `deploy/` del repositorio está organizada por rol.
 
-- VirtualBox, Isard o entorno equivalente de VMs
-- Ubuntu Server 24.04 o similar en las 3 maquinas
-- Acceso `sudo` en las 3 VMs
-- Paquetes del proyecto:
-  - `install_dasc_api.sh`
-  - `uninstall_dasc_api.sh`
-  - `install_db.sh`
-  - `uninstall_db.sh`
-  - `install_backup_services.sh`
-  - `uninstall_backup_services.sh`
+```text
+deploy/
+├── api/
+├── backup-services/
+└── db/
+```
 
-### 2.2 Recursos recomendados por VM
+### 4.1 `deploy/api`
+
+Contiene el instalador y desinstalador del panel web, junto con el paquete completo de la API.
+
+Estructura recomendada:
+
+```text
+deploy/api/
+├── install_dasc_api.sh
+├── uninstall_dasc_api.sh
+└── package/
+    ├── main.py
+    ├── requirements.txt
+    ├── config.env
+    ├── templates/
+    └── static/
+```
+
+### 4.2 `deploy/backup-services`
+
+Contiene el instalador y desinstalador del servidor que ejecuta backups y controla servicios por `systemd`.
+
+Estructura recomendada:
+
+```text
+deploy/backup-services/
+├── install_backup_services.sh
+├── uninstall_backup_services.sh
+└── package/
+    ├── backups_api.sh
+    └── servicios_api.sh
+```
+
+### 4.3 `deploy/db`
+
+Contiene el instalador y desinstalador de MariaDB / MySQL del proyecto.
+
+```text
+deploy/db/
+├── install_db.sh
+└── uninstall_db.sh
+```
+
+---
+
+## 5. Requisitos previos
+
+### 5.1 Software
+
+- VirtualBox, Isard o entorno equivalente de máquinas virtuales
+- Ubuntu Server 22.04 o 24.04
+- acceso `sudo` en las 3 VMs
+- conectividad de red entre las 3 máquinas
+- `git` instalado
+
+### 5.2 Recursos recomendados por VM
 
 - **CPU**: 2 vCPU
-- **RAM**: 2 GB minimo
-- **Disco**: 20 GB minimo
+- **RAM**: 2 GB mínimo
+- **Disco**: 20 GB mínimo
 - **Red**: 2 adaptadores recomendados
 
 ---
 
-## 3. Configuracion de red recomendada
+## 6. Configuración de red recomendada
 
-### 3.1 Adaptadores
-
-Para trabajar comodamente en laboratorio se recomienda esta configuracion en **cada VM**:
+Para laboratorio se recomienda esta configuración en **cada VM**:
 
 - **Adaptador 1: NAT**
-  - Se usa para instalar paquetes con `apt`, actualizar el sistema y tener salida a Internet.
+  - para instalar paquetes con `apt`
+  - para descargar dependencias
+  - para clonar el repositorio
+
 - **Adaptador 2: Red interna**
-  - Nombre recomendado: `dasc-int`
-  - Se usa para la comunicacion entre las 3 VMs.
+  - nombre recomendado: `dasc-int`
+  - para la comunicación entre las tres máquinas
 
-### 3.2 IPs fijas
-
-Asignar estas IPs en el **adaptador interno**:
+### IPs recomendadas
 
 | VM | Rol | IP |
 |---|---|---|
@@ -75,81 +166,15 @@ Asignar estas IPs en el **adaptador interno**:
 | VM 2 | Base de datos | `192.168.60.20/24` |
 | VM 3 | Backups + Servicios | `192.168.60.30/24` |
 
-### 3.3 Comprobar interfaces
-
-Antes de tocar `netplan`, comprobar el nombre real de las interfaces:
+Antes de tocar la red:
 
 ```bash
 ip a
 ```
 
-Lo habitual es:
-
-- `enp0s3` -> NAT
-- `enp0s8` -> Red interna
-
-Puede variar segun la VM.
-
-### 3.4 Configurar IP estatica
-
-Editar:
+Aplicar configuración de red y validar:
 
 ```bash
-sudo nano /etc/netplan/00-installer-config.yaml
-```
-
-#### VM 1 - API (`192.168.60.10`)
-
-```yaml
-network:
-  version: 2
-  ethernets:
-    enp0s3:
-      dhcp4: true
-    enp0s8:
-      dhcp4: false
-      addresses:
-        - 192.168.60.10/24
-```
-
-#### VM 2 - DB (`192.168.60.20`)
-
-```yaml
-network:
-  version: 2
-  ethernets:
-    enp0s3:
-      dhcp4: true
-    enp0s8:
-      dhcp4: false
-      addresses:
-        - 192.168.60.20/24
-```
-
-#### VM 3 - Backups + Servicios (`192.168.60.30`)
-
-```yaml
-network:
-  version: 2
-  ethernets:
-    enp0s3:
-      dhcp4: true
-    enp0s8:
-      dhcp4: false
-      addresses:
-        - 192.168.60.30/24
-```
-
-Aplicar cambios:
-
-```bash
-sudo netplan apply
-```
-
-Validar:
-
-```bash
-ip a
 ping -c 3 192.168.60.10
 ping -c 3 192.168.60.20
 ping -c 3 192.168.60.30
@@ -157,200 +182,264 @@ ping -c 3 192.168.60.30
 
 ---
 
-## 4. Orden recomendado de instalacion
+## 7. Orden recomendado de instalación
 
-Instalar en este orden:
+Instalar siempre en este orden:
 
-1. **Base de datos** (`192.168.60.20`)
-2. **Backups + Servicios** (`192.168.60.30`)
-3. **API / Panel web** (`192.168.60.10`)
+1. **Base de datos**
+2. **Backups + Servicios**
+3. **API / Panel web**
 
 Este orden evita errores porque:
 
-- el servidor de backups necesita que la base de datos ya exista;
-- la API necesita que el servidor de backups y servicios ya este preparado.
+- la máquina de backups necesita que la base ya exista
+- la API necesita que el servidor de backups y servicios ya esté preparado
 
 ---
 
-## 5. Instalacion de la VM 2 - Base de datos
+## 8. Instalación desde GitHub
 
-### 5.1 Copiar el paquete de instalacion
-
-Copiar a la VM de base de datos el paquete correspondiente, por ejemplo:
+En las tres máquinas:
 
 ```bash
-scp install_db.sh uninstall_db.sh usuario@192.168.60.20:/home/usuario/
+sudo apt update
+sudo apt install -y git
+git clone https://github.com/scolmena10/dasc-server-manager.git
 ```
 
-### 5.2 Ejecutar el instalador
+---
 
-Dentro de la VM `192.168.60.20`:
+## 9. Instalación de la VM 2 - Base de datos
+
+### Máquina
+`192.168.60.20`
+
+### Pasos
 
 ```bash
+cd ~/dasc-server-manager/deploy/db
 chmod +x install_db.sh uninstall_db.sh
 sudo ./install_db.sh
 ```
 
-### 5.3 Validaciones minimas
+### Qué debe hacer este instalador
 
-Comprobar que el servicio de base de datos esta levantado:
+- instalar MariaDB
+- dejar el servicio activo
+- crear la base de datos de trabajo del MVP
+- preparar el acceso del servidor de backups
+
+### Validaciones mínimas
 
 ```bash
 sudo systemctl status mariadb --no-pager
-```
-
-Comprobar escucha en el puerto 3306:
-
-```bash
 ss -lntp | grep 3306
-```
-
-Si el instalador crea el usuario de backup, comprobarlo desde MariaDB:
-
-```bash
-sudo mariadb
-SELECT User, Host FROM mysql.user;
-```
-
-Salir:
-
-```sql
-exit;
+sudo mariadb -e "SHOW DATABASES;"
+sudo mariadb -e "SELECT User, Host FROM mysql.user;"
 ```
 
 ---
 
-## 6. Instalacion de la VM 3 - Backups + Servicios
+## 10. Instalación de la VM 3 - Backups + Servicios
 
-### 6.1 Copiar el paquete de instalacion
+### Máquina
+`192.168.60.30`
 
-Copiar a la VM `192.168.60.30`:
-
-```bash
-scp install_backup_services.sh uninstall_backup_services.sh backups_api.sh servicios_api.sh usuario@192.168.60.30:/home/usuario/
-```
-
-### 6.2 Ejecutar el instalador
-
-Dentro de la VM `192.168.60.30`:
+### Pasos
 
 ```bash
+cd ~/dasc-server-manager/deploy/backup-services
 chmod +x install_backup_services.sh uninstall_backup_services.sh
 sudo ./install_backup_services.sh
 ```
 
-### 6.3 Comprobar SSH
+### Qué debe hacer este instalador
+
+- instalar `openssh-server`
+- instalar `mariadb-client`
+- crear o reutilizar el usuario `dasc`
+- preparar la carpeta `/home/dasc/backups`
+- instalar:
+  - `/usr/local/bin/backups_api.sh`
+  - `/usr/local/bin/servicios_api.sh`
+- crear `/home/dasc/.my.cnf`
+- preparar permisos para control de servicios
+
+### Validaciones mínimas
 
 ```bash
 sudo systemctl status ssh --no-pager
-```
-
-### 6.4 Comprobar scripts instalados
-
-```bash
 ls -l /usr/local/bin/backups_api.sh
 ls -l /usr/local/bin/servicios_api.sh
-```
-
-### 6.5 Comprobar carpeta de backups
-
-```bash
 ls -ld /home/dasc/backups
-```
-
-### 6.6 Comprobar acceso a la base de datos desde la VM de backups
-
-Si el instalador ha creado correctamente `/home/dasc/.my.cnf`, se puede probar:
-
-```bash
+sudo -u dasc test -f /home/dasc/.my.cnf && echo ".my.cnf OK"
 sudo -u dasc mysqldump --protocol=tcp --databases employees | head
 ```
 
-Si esa prueba funciona, la maquina de backups ya puede sacar copias de la VM de base de datos.
-
 ---
 
-## 7. Instalacion de la VM 1 - API / Panel web
+## 11. Instalación de la VM 1 - API / Panel web
 
-### 7.1 Copiar el paquete de instalacion
+### Máquina
+`192.168.60.10`
 
-Copiar a la VM `192.168.60.10`:
-
-```bash
-scp -r install_dasc_api.sh uninstall_dasc_api.sh main.py requirements.txt config.env templates static usuario@192.168.60.10:/home/usuario/dasc-api/
-```
-
-### 7.2 Ejecutar el instalador
-
-Dentro de la VM `192.168.60.10`:
+### Pasos
 
 ```bash
-cd /home/usuario/dasc-api
+cd ~/dasc-server-manager/deploy/api
 chmod +x install_dasc_api.sh uninstall_dasc_api.sh
 sudo ./install_dasc_api.sh
 ```
 
-### 7.3 Revisar configuracion
+### Qué debe hacer este instalador
 
-El instalador copia el proyecto a:
+- copiar el proyecto a `/opt/dasc/api`
+- crear el entorno virtual `venv`
+- instalar dependencias Python
+- crear el servicio `dasc-api.service`
+- habilitar el arranque automático
+- reiniciar el servicio
 
-```bash
-/opt/dasc/api
-```
-
-Revisar el fichero:
-
-```bash
-sudo nano /opt/dasc/api/config.env
-```
-
-Contenido esperado:
-
-```env
-SSH_USER=dasc
-SERVICIOS_HOST=192.168.60.30
-BACKUPS_HOST=192.168.60.30
-CACTI_URL=/cacti/
-```
-
-### 7.4 Comprobar servicio
+### Validaciones mínimas
 
 ```bash
 sudo systemctl status dasc-api --no-pager
-```
-
-### 7.5 Comprobar que escucha en el puerto 8000
-
-```bash
 ss -lntp | grep 8000
-```
-
-### 7.6 Comprobar acceso local
-
-```bash
 curl -I http://127.0.0.1:8000
 ```
 
 ---
 
-## 8. Validaciones completas del entorno
+## 12. Configuración del panel
 
-### 8.1 Conectividad entre VMs
+La API usa configuración por variables de entorno mediante `config.env`.
 
-Desde la API (`192.168.60.10`):
+Ruta esperada tras la instalación:
+
+```bash
+/opt/dasc/api/config.env
+```
+
+Valores típicos del laboratorio:
+
+```env
+SSH_USER=dasc
+
+SERVICIOS_HOST=192.168.60.30
+BACKUPS_HOST=192.168.60.30
+
+CACTI_URL=/cacti/
+
+LOGS_DB_HOST=192.168.60.20
+LOGS_DB_NAME=dasc_logs
+LOGS_DB_USER=dasc_logs
+LOGS_DB_PASS=dascpass
+LOGS_ORIGIN=dasc-web
+
+SECRET_KEY=...
+ADMIN_USER=admin
+ADMIN_PASSWORD=...
+```
+
+Revisar:
+
+```bash
+sudo nano /opt/dasc/api/config.env
+```
+
+---
+
+## 13. Cómo funciona la aplicación
+
+La API del panel:
+
+- carga configuración desde `config.env`
+- sirve plantillas HTML desde `templates/`
+- sirve archivos estáticos desde `static/`
+- gestiona sesiones y login
+- permite usuarios con permisos por módulo
+- conecta por SSH con el servidor remoto para:
+  - listar servicios
+  - arrancar, parar y reiniciar servicios
+  - ejecutar backups
+- registra eventos en la base de logs
+
+### Módulos funcionales del MVP
+
+#### 13.1 Login y sesión
+- login con usuario administrador por variables de entorno
+- sesiones basadas en middleware
+- logout desde panel
+
+#### 13.2 Usuarios y permisos
+- usuarios adicionales desde `data/users.json`
+- permisos separados para:
+  - `logs`
+  - `backups`
+  - `servicios`
+
+#### 13.3 Servicios
+- listado remoto de servicios vía `servicios_api.sh`
+- acciones:
+  - `start`
+  - `stop`
+  - `restart`
+
+#### 13.4 Backups
+- formulario de backup desde el panel
+- tipos disponibles:
+  - `full`
+  - `incremental`
+  - `differential`
+- parámetros:
+  - base de datos
+  - ruta destino
+  - nombre
+  - compresión
+  - retención
+  - referencia base
+  - notas
+
+#### 13.5 Logs
+- tabla de eventos desde base de datos
+- apertura de Cacti desde el panel
+- auditoría de acciones del sistema
+
+---
+
+## 14. Acceso al panel
+
+Una vez instalada la API:
+
+```text
+http://192.168.60.10:8000
+```
+
+Credenciales iniciales:
+
+- usuario: definido por `ADMIN_USER`
+- contraseña: definida por `ADMIN_PASSWORD`
+
+---
+
+## 15. Validaciones completas del entorno
+
+### 15.1 Conectividad entre VMs
+
+Desde la API:
 
 ```bash
 ping -c 3 192.168.60.20
 ping -c 3 192.168.60.30
 ```
 
-### 8.2 SSH desde la API hacia Backups + Servicios
+### 15.2 SSH desde la API hacia Backups + Servicios
 
 ```bash
 ssh dasc@192.168.60.30 "hostname && date"
 ```
 
-### 8.3 Estado del panel
+### 15.3 Estado del panel
 
 Abrir en navegador:
 
@@ -358,69 +447,82 @@ Abrir en navegador:
 http://192.168.60.10:8000
 ```
 
-### 8.4 Prueba de servicios
+### 15.4 Prueba de servicios
 
 Desde el panel, entrar en **Servicios** y probar:
+
 - `start`
 - `stop`
 - `restart`
 
-### 8.5 Prueba de backup
+### 15.5 Prueba de backup
 
 Desde el panel, entrar en **Copias** y lanzar un backup.
 
-Despues, comprobar en la VM `192.168.60.30`:
+Después, comprobar en la VM `192.168.60.30`:
 
 ```bash
 ls -lah /home/dasc/backups
 ```
 
+### 15.6 Prueba de logs
+
+Entrar en **Logs** y comprobar:
+
+- apertura de Cacti
+- eventos recientes
+- estado OK / ERROR de acciones
+
 ---
 
-## 9. Rutas importantes del sistema
+## 16. Rutas importantes del sistema
 
 ### VM 1 - API
 
-- Proyecto instalado:
+- instalación:
   ```bash
   /opt/dasc/api
   ```
-- Servicio:
+
+- servicio:
   ```bash
   /etc/systemd/system/dasc-api.service
   ```
 
 ### VM 2 - DB
 
-- Servicio MariaDB:
+- servicio:
   ```bash
   mariadb
   ```
 
 ### VM 3 - Backups + Servicios
 
-- Script de backups:
+- script de backups:
   ```bash
   /usr/local/bin/backups_api.sh
   ```
-- Script de servicios:
+
+- script de servicios:
   ```bash
   /usr/local/bin/servicios_api.sh
   ```
-- Carpeta de copias:
+
+- carpeta de copias:
   ```bash
   /home/dasc/backups
   ```
-- Credenciales de cliente:
+
+- credenciales cliente:
   ```bash
   /home/dasc/.my.cnf
   ```
 
 ---
 
-## 10. Comandos de soporte y troubleshooting
+## 17. Troubleshooting
 
-### 10.1 API no arranca
+### 17.1 La API no arranca
 
 ```bash
 sudo systemctl status dasc-api --no-pager
@@ -428,16 +530,16 @@ sudo journalctl -u dasc-api -n 50 --no-pager
 ls -l /opt/dasc/api/venv/bin/uvicorn
 ```
 
-### 10.2 La API no llega por SSH a la VM de backups
+### 17.2 La API no llega por SSH a la VM de backups
 
 ```bash
 ssh dasc@192.168.60.30 "hostname"
 sudo systemctl status ssh --no-pager
 ```
 
-### 10.3 El backup falla
+### 17.3 El backup falla
 
-Comprobar en la VM de backups:
+En la VM de backups:
 
 ```bash
 ls -l /usr/local/bin/backups_api.sh
@@ -445,7 +547,7 @@ ls -l /home/dasc/.my.cnf
 sudo -u dasc mysqldump --protocol=tcp --databases employees | head
 ```
 
-### 10.4 La DB no acepta conexiones remotas
+### 17.4 La DB no acepta conexiones remotas
 
 En la VM de DB:
 
@@ -457,40 +559,60 @@ sudo mariadb -e "SELECT User, Host FROM mysql.user;"
 
 ---
 
-## 11. Desinstalacion
+## 18. Desinstalación
 
-### 11.1 API
-
-En `192.168.60.10`:
+### API
 
 ```bash
+cd ~/dasc-server-manager/deploy/api
 sudo ./uninstall_dasc_api.sh
 ```
 
-### 11.2 Base de datos
-
-En `192.168.60.20`:
+### Base de datos
 
 ```bash
+cd ~/dasc-server-manager/deploy/db
 sudo ./uninstall_db.sh
 ```
 
-### 11.3 Backups + Servicios
-
-En `192.168.60.30`:
+### Backups + Servicios
 
 ```bash
+cd ~/dasc-server-manager/deploy/backup-services
 sudo ./uninstall_backup_services.sh
 ```
 
 ---
 
-## 12. Resumen final
+## 19. Estado funcional del MVP
 
-Si todo esta correcto, el entorno queda asi:
+Actualmente el MVP demuestra:
+
+- login y sesión
+- control de accesos por permisos
+- ejecución de backups desde web
+- gestión remota de servicios
+- auditoría de eventos
+- integración visual con Cacti
+- despliegue por roles dentro de `deploy/`
+
+### Mejoras previstas para versiones posteriores
+
+- restauración desde panel
+- historial más avanzado de backups
+- backups incrementales y diferenciales reales más allá del flujo MVP
+- alertas y notificaciones
+- endurecimiento de seguridad
+- despliegue todavía más automatizado
+
+---
+
+## 20. Resumen final
+
+Si todo está correcto, el entorno queda así:
 
 - **VM 1 (`192.168.60.10`)**: panel web FastAPI funcionando en el puerto `8000`
 - **VM 2 (`192.168.60.20`)**: base de datos lista para recibir `mysqldump`
-- **VM 3 (`192.168.60.30`)**: servidor de backups y gestion de servicios accesible por SSH
+- **VM 3 (`192.168.60.30`)**: servidor de backups y gestión de servicios accesible por SSH
 
-Con esto queda instalado el MVP distribuido de DASC Server Manager en entorno de laboratorio con maquinas virtuales.
+Con esto queda documentado el **MVP distribuido de DASC Server Manager** con un enfoque de despliegue más limpio, mantenible y alineado con la estructura actual del repositorio.
