@@ -12,7 +12,6 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# 1) Password del admin web
 read -s -p "Introduce contraseña para el usuario admin de Cacti: " CACTI_ADMIN_PASS
 echo
 read -s -p "Repite la contraseña: " CACTI_ADMIN_PASS_CONFIRM
@@ -53,7 +52,6 @@ done
 systemctl restart apache2
 
 echo "[4/10] Ajustes MariaDB para pasar checks de Cacti (antes de crear BD)..."
-# Archivo "99-" para que SIEMPRE tenga prioridad
 cat >/etc/mysql/mariadb.conf.d/99-cacti.cnf <<'CNF'
 [mysqld]
 character-set-server = utf8mb4
@@ -152,6 +150,6 @@ FLUSH PRIVILEGES;
 SQL
 
 echo
-echo "✅ Instalación completada"
+echo "Instalación completada"
 echo "Cacti: http://IP_SERVIDOR/cacti"
 echo "Login: admin / (la contraseña que has puesto)"

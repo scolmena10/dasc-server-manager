@@ -2,78 +2,99 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Servicios - DASC</title>
-
-  <!-- CSS -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DASC · Servicios</title>
   <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
-
-  <!-- ICONOS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-
 <body>
-
 <header class="header">
   <a href="/" class="brand">
-    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo">
+    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
     <div class="brand-text">
-      <span class="brand-title">DASC</span>
+      <span class="brand-title">DASC Service</span>
       <span class="brand-subtitle">Server Manager</span>
     </div>
   </a>
 
-  <h1>Gestión de Servicios</h1>
+  <h1>Gestión de servicios</h1>
 
   <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
-    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo">
+    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
   </a>
 </header>
 
 <div class="layout">
-
   <aside class="sidebar">
     <h2>Menú</h2>
-
     <nav class="menu">
-      <a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>
-      <a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>
-      <a href="/servicios" class="active"><i class="fa-solid fa-server"></i> Servicios</a>
       <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+      {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+      <a href="/servicios" class="active"><i class="fa-solid fa-server"></i> Servicios</a>
+      {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
     </nav>
 
     <div class="history">
-      <h3>Historial</h3>
-      <p><span class="dot ok"></span> Servicios cargados</p>
-      <p><span class="dot warn"></span> Acciones pendientes</p>
-      <p><span class="dot ok"></span> Sistema operativo</p>
+      <h3>Resumen</h3>
+      <p><span class="dot ok"></span> Activos: {{ services_active }}</p>
+      <p><span class="dot warn"></span> No activos: {{ services_inactive }}</p>
+      <p><span class="dot ok"></span> Total listados: {{ services_total }}</p>
     </div>
   </aside>
 
   <main class="main">
-
-  {% if msg %}
+    {% if msg %}
     <div class="alert {% if ok == '1' %}success{% else %}error{% endif %}">
-      {{ msg }}
+      <i class="fa-solid {% if ok == '1' %}fa-circle-check{% else %}fa-triangle-exclamation{% endif %}"></i>
+      <span>{{ msg }}</span>
     </div>
-  {% endif %}
+    {% endif %}
 
     <div class="topbar">
       <div>
         <h2 class="page-title">Servicios del sistema</h2>
-        <p class="page-subtitle">Inicia, detén o reinicia servicios (systemd)</p>
+        <p class="page-subtitle">He unificado la navegación con el resto del panel y añadido resumen rápido para que esta vista no parezca aislada.</p>
       </div>
+      <div class="topbar-actions">
+        <div class="status-pill"><i class="fa-solid fa-user"></i> {{ user }}</div>
+        <form method="post" action="/logout" class="logout-form">
+          <button type="submit" class="btn"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
+        </form>
+      </div>
+    </div>
 
-      <div class="status-pill">
-        <i class="fa-solid fa-shield-halved"></i>
-        Estado: <strong>Operativo</strong>
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div><div class="kpi-label">Servicios</div><div class="kpi-value">{{ services_total }}</div></div>
+        <i class="fa-solid fa-server"></i>
+      </div>
+      <div class="kpi-card">
+        <div><div class="kpi-label">Activos</div><div class="kpi-value ok">{{ services_active }}</div></div>
+        <i class="fa-solid fa-play"></i>
+      </div>
+      <div class="kpi-card">
+        <div><div class="kpi-label">Requieren revisión</div><div class="kpi-value warn">{{ services_inactive }}</div></div>
+        <i class="fa-solid fa-power-off"></i>
       </div>
     </div>
 
     <section class="card card-mini">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-gear"></i></div>
+        <div class="card-title">
+          <h3>Listado de servicios</h3>
+          <p>Con filtro cliente para que en demo no tengas que pelearte con una tabla enorme.</p>
+        </div>
+      </div>
 
+      {% if servicios %}
+      <div class="toolbar">
+        <input id="serviceFilter" class="search-input" type="text" placeholder="Filtrar por nombre de servicio..." oninput="filterServices()">
+      </div>
       <div class="svc-table-wrap">
-        <table class="svc-table">
+        <table class="svc-table" id="servicesTable">
           <thead>
             <tr>
               <th>Servicio</th>
@@ -81,59 +102,50 @@
               <th class="right">Acciones</th>
             </tr>
           </thead>
-
           <tbody>
             {% for s in servicios %}
             <tr>
+              <td><div class="svc-name">{{ s.nombre }}</div></td>
               <td>
-                <div class="svc-name">{{ s.nombre }}</div>
-              </td>
-
-              <td>
-                {% if s.estado == "active" %}
-                  <span class="svc-badge active">
-                    <i class="fa-solid fa-circle-check"></i> Activo
-                  </span>
+                {% if s.estado == 'active' %}
+                  <span class="svc-badge active"><i class="fa-solid fa-circle-check"></i> Activo</span>
+                {% elif s.estado in ['failed', 'deactivating'] %}
+                  <span class="svc-badge failed"><i class="fa-solid fa-triangle-exclamation"></i> {{ s.estado }}</span>
                 {% else %}
-                  <span class="svc-badge inactive">
-                    <i class="fa-solid fa-triangle-exclamation"></i> Inactivo
-                  </span>
+                  <span class="svc-badge inactive"><i class="fa-solid fa-circle-pause"></i> {{ s.estado }}</span>
                 {% endif %}
               </td>
-
               <td class="right">
                 <form method="POST" action="/servicios/accion" class="inline">
                   <input type="hidden" name="service" value="{{ s.nombre }}">
-
-                  <button class="btn small" name="action" value="start" type="submit">
-                    <i class="fa-solid fa-play"></i> Start
-                  </button>
-
-                  <button class="btn small" name="action" value="stop" type="submit">
-                    <i class="fa-solid fa-stop"></i> Stop
-                  </button>
-
-                  <button class="btn small primary" name="action" value="restart" type="submit">
-                    <i class="fa-solid fa-rotate-right"></i> Restart
-                  </button>
+                  <button class="btn small" name="action" value="start" type="submit"><i class="fa-solid fa-play"></i> Start</button>
+                  <button class="btn small" name="action" value="stop" type="submit"><i class="fa-solid fa-stop"></i> Stop</button>
+                  <button class="btn small primary" name="action" value="restart" type="submit"><i class="fa-solid fa-rotate-right"></i> Restart</button>
                 </form>
               </td>
             </tr>
             {% endfor %}
           </tbody>
-
         </table>
       </div>
-
-      <div class="card-foot">
-        <span class="meta"><i class="fa-regular fa-clock"></i> Actualiza recargando la página</span>
-        <span class="meta ok"><i class="fa-solid fa-circle-check"></i> MVP</span>
+      {% else %}
+      <div class="empty-state">
+        <p>No se han podido cargar servicios. Si estás en una demo, esta vista ahora enseña el error superior de forma clara cuando falle la conexión SSH.</p>
       </div>
-
+      {% endif %}
     </section>
-
   </main>
-
 </div>
+
+<script>
+function filterServices() {
+  const term = document.getElementById('serviceFilter').value.toLowerCase();
+  const rows = document.querySelectorAll('#servicesTable tbody tr');
+  rows.forEach((row) => {
+    const text = row.innerText.toLowerCase();
+    row.style.display = text.includes(term) ? '' : 'none';
+  });
+}
+</script>
 </body>
 </html>

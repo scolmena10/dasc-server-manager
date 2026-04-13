@@ -3,88 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - DASC</title>
-    <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+    <title>Login · DASC</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <style>
+        * { box-sizing: border-box; }
         body {
             margin: 0;
             font-family: Arial, sans-serif;
-            background: #0f172a;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
             color: white;
             display: flex;
             align-items: center;
             justify-content: center;
             min-height: 100vh;
+            padding: 24px;
         }
-
         .login-box {
-            background: #1e293b;
+            background: rgba(15, 23, 42, 0.92);
             padding: 2rem;
-            border-radius: 12px;
+            border-radius: 18px;
             width: 100%;
-            max-width: 400px;
-            box-shadow: 0 10px 30px rgba(0,0,0,.35);
+            max-width: 430px;
+            box-shadow: 0 18px 40px rgba(0,0,0,.35);
+            border: 1px solid rgba(255,255,255,.08);
         }
-
-        .login-box h1 {
-            margin-top: 0;
-            margin-bottom: 1rem;
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(37,99,235,.15);
+            color: #bfdbfe;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 14px;
         }
-
-        .login-box p {
-            color: #cbd5e1;
+        h1 { margin: 0 0 .5rem; }
+        p { color: #cbd5e1; margin-bottom: 1.2rem; }
+        label { display: block; margin-top: 1rem; margin-bottom: .4rem; font-weight: 700; }
+        .input-wrap { position: relative; }
+        .input-wrap i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #94a3b8;
         }
-
-        .login-box label {
-            display: block;
-            margin-top: 1rem;
-            margin-bottom: .4rem;
-        }
-
-        .login-box input {
+        input {
             width: 100%;
-            padding: .8rem;
-            border-radius: 8px;
-            border: 1px solid #475569;
-            background: #0f172a;
+            padding: .9rem .9rem .9rem 2.4rem;
+            border-radius: 10px;
+            border: 1px solid #334155;
+            background: #0b1220;
             color: white;
-            box-sizing: border-box;
         }
-
-        .login-box button {
+        button {
             width: 100%;
             margin-top: 1.2rem;
-            padding: .9rem;
+            padding: .95rem;
             border: 0;
-            border-radius: 8px;
+            border-radius: 10px;
             background: #2563eb;
             color: white;
             font-weight: bold;
             cursor: pointer;
         }
-
+        .hint {
+            margin-top: 14px;
+            font-size: 13px;
+            color: #94a3b8;
+        }
         .error {
             margin-top: 1rem;
             background: #7f1d1d;
             padding: .8rem;
             border-radius: 8px;
+            border: 1px solid #991b1b;
         }
     </style>
 </head>
 <body>
     <div class="login-box">
-        <h1>Acceso DASC</h1>
-        <p>Introduce tus credenciales para entrar al panel.</p>
+        <div class="eyebrow"><i class="fa-solid fa-shield-halved"></i> DASC Server Manager</div>
+        <h1>Acceso al panel</h1>
+        <p>Login pulido para que el MVP entre mejor por los ojos desde el primer momento.</p>
 
         <form method="post" action="/login">
             <label for="username">Usuario</label>
-            <input type="text" id="username" name="username" required>
+            <div class="input-wrap">
+                <i class="fa-solid fa-user"></i>
+                <input type="text" id="username" name="username" required>
+            </div>
 
             <label for="password">Contraseña</label>
-            <input type="password" id="password" name="password" required>
+            <div class="input-wrap">
+                <i class="fa-solid fa-lock"></i>
+                <input type="password" id="password" name="password" required>
+            </div>
 
-            <button type="submit">Entrar</button>
+            <button type="submit"><i class="fa-solid fa-right-to-bracket"></i> Entrar</button>
         </form>
+
+        <div class="hint">El acceso y los permisos se gestionan desde la propia vista de administración.</div>
 
         {% if error %}
             <div class="error">Usuario o contraseña incorrectos.</div>

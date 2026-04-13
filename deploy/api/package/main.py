@@ -156,15 +156,23 @@ def has_permission(request: Request, permission: str) -> bool:
     return is_admin(request) or permission in get_permissions(request)
 
 
+def permission_labels_from_keys(keys: list[str]) -> list[str]:
+    return [AVAILABLE_PERMISSIONS[k] for k in keys if k in AVAILABLE_PERMISSIONS]
+
+
 def get_common_context(request: Request):
     perms = get_permissions(request)
     admin = is_admin(request)
+    effective_keys = list(AVAILABLE_PERMISSIONS.keys()) if admin else perms
     return {
         "user": request.session.get("user"),
         "is_admin": admin,
+        "role_label": "Administrador" if admin else "Usuario",
         "can_logs": admin or "logs" in perms,
         "can_backups": admin or "backups" in perms,
         "can_servicios": admin or "servicios" in perms,
+        "permission_labels": permission_labels_from_keys(effective_keys),
+        "permissions_count": len(effective_keys),
     }
 
 
@@ -334,6 +342,13 @@ def logout_post(request: Request):
 def home(request: Request):
     context = get_common_context(request)
     context["msg"] = request.query_params.get("msg")
+    context["managed_sections"] = sum([
+        1 if context["can_backups"] else 0,
+        1 if context["can_logs"] else 0,
+        1 if context["can_servicios"] else 0,
+        1 if context["is_admin"] else 0,
+    ])
+    context["users_count"] = len(load_users()) + 1 if context["is_admin"] else None
     return templates.TemplateResponse(request, "index.html", context)
 
 
@@ -350,6 +365,7 @@ def admin_users_page(request: Request):
     context["msg"] = request.query_params.get("msg")
     context["users"] = load_users()
     context["available_permissions"] = AVAILABLE_PERMISSIONS
+    context["users_count"] = len(context["users"]) + 1
     return templates.TemplateResponse(request, "admin_users.html", context)
 
 
@@ -366,6 +382,12 @@ def create_user(
     username = (username or "").strip()
     password = (password or "").strip()
     permissions = normalize_permissions(permissions)
+
+    if " " in username:
+        return RedirectResponse(
+            url="/admin/usuarios?ok=0&msg=El+usuario+no+puede+contener+espacios",
+            status_code=303,
+        )
 
     if not username or not password:
         return RedirectResponse(
@@ -470,6 +492,10 @@ def ver_logs(request: Request):
     context = get_common_context(request)
     context["cacti_url"] = CACTI_URL
     context["eventos"] = eventos
+    context["logs_total"] = len(eventos)
+    context["logs_ok"] = sum(1 for e in eventos if e.get("resultado") == "OK")
+    context["logs_error"] = sum(1 for e in eventos if e.get("resultado") != "OK")
+    context["logs_last"] = eventos[0].get("fecha") if eventos else None
     return templates.TemplateResponse(request, "logs.html", context)
 
 
@@ -485,6 +511,10 @@ def ver_servicios(request: Request):
     ok = request.query_params.get("ok")
     msg = request.query_params.get("msg")
 
+    if salida.startswith("ERROR") and not msg:
+        ok = "0"
+        msg = salida
+
     lista_servicios = []
     for linea in salida.split("\n"):
         if "|" in linea:
@@ -498,6 +528,9 @@ def ver_servicios(request: Request):
     context["servicios"] = lista_servicios
     context["ok"] = ok
     context["msg"] = msg
+    context["services_total"] = len(lista_servicios)
+    context["services_active"] = sum(1 for s in lista_servicios if s["estado"] == "active")
+    context["services_inactive"] = len(lista_servicios) - context["services_active"]
     return templates.TemplateResponse(request, "servicios.html", context)
 
 
