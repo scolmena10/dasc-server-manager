@@ -55,7 +55,6 @@
     <div class="topbar">
       <div>
         <h2 class="page-title">Servicios del sistema</h2>
-        <p class="page-subtitle">He unificado la navegación con el resto del panel y añadido resumen rápido para que esta vista no parezca aislada.</p>
       </div>
       <div class="topbar-actions">
         <div class="status-pill"><i class="fa-solid fa-user"></i> {{ user }}</div>
@@ -75,7 +74,7 @@
         <i class="fa-solid fa-play"></i>
       </div>
       <div class="kpi-card">
-        <div><div class="kpi-label">Requieren revisión</div><div class="kpi-value warn">{{ services_inactive }}</div></div>
+        <div><div class="kpi-label">No activos</div><div class="kpi-value warn">{{ services_inactive }}</div></div>
         <i class="fa-solid fa-power-off"></i>
       </div>
     </div>
@@ -85,7 +84,6 @@
         <div class="card-icon"><i class="fa-solid fa-gear"></i></div>
         <div class="card-title">
           <h3>Listado de servicios</h3>
-          <p>Con filtro cliente para que en demo no tengas que pelearte con una tabla enorme.</p>
         </div>
       </div>
 
@@ -130,7 +128,7 @@
       </div>
       {% else %}
       <div class="empty-state">
-        <p>No se han podido cargar servicios. Si estás en una demo, esta vista ahora enseña el error superior de forma clara cuando falle la conexión SSH.</p>
+        <p>No se han podido cargar servicios. Esta vista ahora el error de forma clara cuando falle la conexión SSH.</p>
       </div>
       {% endif %}
     </section>
