@@ -3,37 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DASC Service - Panel</title>
+    <title>DASC Service - Server Manager</title>
 
+    <!-- CSS -->
     <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+
+    <!-- ICONOS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-    <style>
-        .topbar-actions {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-        }
-
-        .logout-form {
-            margin: 0;
-        }
-
-        .logout-form button {
-            cursor: pointer;
-        }
-
-        .alert-box {
-            background: #1e293b;
-            border: 1px solid #334155;
-            color: #e2e8f0;
-            padding: 14px 16px;
-            border-radius: 12px;
-            margin-bottom: 18px;
-        }
-    </style>
 </head>
 
 <body>
@@ -60,41 +37,29 @@
         <h2>Menú</h2>
 
         <nav class="menu">
-            <a href="/" class="active"><i class="fa-solid fa-house"></i> Panel</a>
-
-            {% if can_backups %}
-            <a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>
-            {% endif %}
-
-            {% if can_logs %}
-            <a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>
-            {% endif %}
-
-            {% if can_servicios %}
-            <a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>
-            {% endif %}
-
-            {% if is_admin %}
-            <a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>
-            {% endif %}
+            <a href="/backups">
+                <i class="fa-solid fa-database"></i> Copias
+            </a>
+            <a href="/logs">
+                <i class="fa-solid fa-file-lines"></i> Logs
+            </a>
+            <a href="/servicios">
+                <i class="fa-solid fa-server"></i> Servicios
+            </a>
+            <a href="/documentacion">
+                <i class="fa-solid fa-book"></i> Documentación
+            </a>
         </nav>
 
         <div class="history">
-            <h3>Accesos disponibles</h3>
-            {% if can_backups %}<p><span class="dot ok"></span> Copias habilitado</p>{% endif %}
-            {% if can_logs %}<p><span class="dot ok"></span> Logs habilitado</p>{% endif %}
-            {% if can_servicios %}<p><span class="dot ok"></span> Servicios habilitado</p>{% endif %}
-            {% if is_admin %}<p><span class="dot ok"></span> Administración habilitada</p>{% endif %}
+            <h3>Historial</h3>
+            <p><span class="dot ok"></span> Backup completo OK</p>
+            <p><span class="dot warn"></span> Incremental pendiente</p>
+            <p><span class="dot ok"></span> Logs consultados</p>
         </div>
     </aside>
 
     <main class="main">
-
-        {% if msg %}
-        <div class="alert-box">
-            <i class="fa-solid fa-circle-info"></i> {{ msg }}
-        </div>
-        {% endif %}
 
         <div class="topbar">
             <div>
@@ -102,30 +67,15 @@
                 <p class="page-subtitle">Proyecto DASC Service</p>
             </div>
 
-            <div class="topbar-actions">
-                <div class="status-pill">
-                    <i class="fa-solid fa-user"></i>
-                    Usuario: <strong>{{ user }}</strong>
-                </div>
-
-                {% if is_admin %}
-                <div class="status-pill">
-                    <i class="fa-solid fa-crown"></i>
-                    Rol: <strong>Administrador</strong>
-                </div>
-                {% endif %}
-
-                <form method="post" action="/logout" class="logout-form">
-                    <button type="submit" class="btn">
-                        <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
-                    </button>
-                </form>
+            <div class="status-pill">
+                <i class="fa-solid fa-shield-halved"></i>
+                Estado: <strong>Operativo</strong>
             </div>
         </div>
 
         <section class="grid">
 
-            {% if can_backups %}
+            <!-- BACKUPS -->
             <article class="card">
                 <div class="card-head">
                     <div class="card-icon">
@@ -139,13 +89,18 @@
 
                 <div class="actions">
                     <a class="btn primary" href="/backups">
-                        <i class="fa-solid fa-box"></i> Abrir Copias
+                        <i class="fa-solid fa-box"></i> Backup completo
+                    </a>
+                    <a class="btn" href="/backups">
+                        <i class="fa-solid fa-rotate"></i> Backup incremental
+                    </a>
+                    <a class="btn" href="/backups">
+                        <i class="fa-solid fa-layer-group"></i> Backup diferencial
                     </a>
                 </div>
             </article>
-            {% endif %}
 
-            {% if can_logs %}
+            <!-- LOGS -->
             <article class="card">
                 <div class="card-head">
                     <div class="card-icon">
@@ -158,14 +113,16 @@
                 </div>
 
                 <div class="actions">
-                    <a class="btn primary" href="/logs">
-                        <i class="fa-solid fa-chart-line"></i> Abrir Logs
+                    <a class="btn primary" href="#" onclick="window.open(window.location.protocol + '//' + window.location.hostname + '/cacti/', '_blank'); return false;">
+                        <i class="fa-solid fa-eye"></i> Ver Cacti
+                    </a>
+                    <a class="btn ghost" href="/logs">
+                        <i class="fa-solid fa-chart-line"></i> Panel de logs
                     </a>
                 </div>
             </article>
-            {% endif %}
 
-            {% if can_servicios %}
+            <!-- SERVICIOS -->
             <article class="card card-mini">
                 <div class="card-head">
                     <div class="card-icon">
@@ -179,31 +136,10 @@
 
                 <div class="actions">
                     <a class="btn" href="/servicios">
-                        <i class="fa-solid fa-gear"></i> Gestionar servicios
+                        <i class="fa-solid fa-gear"></i> Gestionar todos
                     </a>
                 </div>
             </article>
-            {% endif %}
-
-            {% if is_admin %}
-            <article class="card">
-                <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-solid fa-user-shield"></i>
-                    </div>
-                    <div class="card-title">
-                        <h3>Administración</h3>
-                        <p>Crea usuarios y define permisos</p>
-                    </div>
-                </div>
-
-                <div class="actions">
-                    <a class="btn primary" href="/admin/usuarios">
-                        <i class="fa-solid fa-user-plus"></i> Gestionar usuarios
-                    </a>
-                </div>
-            </article>
-            {% endif %}
 
         </section>
 

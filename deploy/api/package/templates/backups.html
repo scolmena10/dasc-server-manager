@@ -1,212 +1,366 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Backups - DASC</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DASC · Copias</title>
 
   <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/backups.css') }}">
+  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
-  <style>
-    .topbar-actions {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex-wrap: wrap;
-    }
-
-    .logout-form {
-      margin: 0;
-    }
-
-    .alert {
-      margin-bottom: 20px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      font-weight: 600;
-    }
-
-    .alert-ok {
-      background: #052e16;
-      color: #dcfce7;
-      border: 1px solid #166534;
-    }
-
-    .alert-err {
-      background: #450a0a;
-      color: #fee2e2;
-      border: 1px solid #991b1b;
-    }
-
-    .simple-form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-      margin-top: 18px;
-    }
-
-    .simple-form-grid input,
-    .simple-form-grid select {
-      width: 100%;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #fff;
-      box-sizing: border-box;
-    }
-
-    .field-block label {
-      display: block;
-      margin-bottom: 8px;
-      font-weight: 600;
-    }
-
-    .form-actions {
-      margin-top: 18px;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-  </style>
 </head>
 
 <body>
-
 <header class="header">
-  <a href="/" class="brand">
-    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo">
-    <div class="brand-text">
-      <span class="brand-title">DASC</span>
-      <span class="brand-subtitle">Server Manager</span>
-    </div>
-  </a>
+    <a href="/" class="brand">
+        <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
+        <div class="brand-text">
+            <span class="brand-title">DASC Service</span>
+            <span class="brand-subtitle">Server Manager</span>
+        </div>
+    </a>
 
-  <h1>Gestión de Backups</h1>
+    <h1>DASC Copias de Seguridad</h1>
 
-  <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
-    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo">
-  </a>
+    <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+        <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
+    </a>
 </header>
 
 <div class="layout">
+
   <aside class="sidebar">
     <h2>Menú</h2>
 
     <nav class="menu">
-      <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
-      <a href="/backups" class="active"><i class="fa-solid fa-database"></i> Copias</a>
-      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
-      {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
-      {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
+      <a href="../backups" class="active">
+        <i class="fa-solid fa-database"></i> Copias
+      </a>
+      <a href="/logs">
+        <i class="fa-solid fa-file-lines"></i> Logs
+      </a>
+      <a href="../servicios">
+        <i class="fa-solid fa-server"></i> Servicios
+      </a>
+      <a href="../documentacion">
+        <i class="fa-solid fa-book"></i> Documentación
+      </a>
     </nav>
+
+    <div class="history">
+      <h3>Historial</h3>
+      <p><span class="dot ok"></span> Backup completo OK</p>
+      <p><span class="dot warn"></span> Incremental pendiente</p>
+      <p><span class="dot ok"></span> Logs consultados</p>
+    </div>
   </aside>
 
   <main class="main">
+
     <div class="topbar">
       <div>
-        <h2 class="page-title">Copias de seguridad</h2>
-        <p class="page-subtitle">Ejecuta backups manuales</p>
-      </div>
-
-      <div class="topbar-actions">
-        <div class="status-pill">
-          <i class="fa-solid fa-user"></i>
-          Usuario: <strong>{{ user }}</strong>
-        </div>
-
-        <form method="post" action="/logout" class="logout-form">
-          <button type="submit" class="btn">
-            <i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión
-          </button>
-        </form>
+        <h2 class="page-title">Gestión de copias</h2>
+        <p class="page-subtitle">Crea copias completas, incrementales y diferenciales desde el panel</p>
       </div>
     </div>
 
-    {% if ok == "1" %}
+  {% if ok == "1" %}
     <div class="alert alert-ok">
       <i class="fa-solid fa-circle-check"></i> {{ msg or "Backup ejecutado correctamente." }}
     </div>
-    {% elif ok == "0" %}
+  {% elif ok == "0" %}
     <div class="alert alert-err">
       <i class="fa-solid fa-triangle-exclamation"></i> {{ msg or "Error al ejecutar el backup." }}
     </div>
-    {% endif %}
+  {% endif %}
 
-    <section class="card">
-      <div class="card-head">
-        <div class="card-icon"><i class="fa-solid fa-box-archive"></i></div>
-        <div class="card-title">
-          <h3>Crear backup</h3>
-          <p>Selecciona el tipo y ejecuta la copia</p>
+    <section class="grid">
+
+        <article class="card">
+        <div class="card-head">
+          <div class="card-icon"><i class="fa-solid fa-database"></i></div>
+          <div class="card-title">
+            <h3>Crear copia</h3>
+            <p>Elige el tipo de backup y configúralo</p>
+          </div>
+        </div>
+
+        <div class="actions">
+          <a class="btn primary" href="#modal-completo">
+            <i class="fa-solid fa-box"></i> Backup completo
+          </a>
+          <a class="btn" href="#modal-incremental">
+            <i class="fa-solid fa-rotate"></i> Backup incremental
+          </a>
+          <a class="btn" href="#modal-diferencial">
+            <i class="fa-solid fa-layer-group"></i> Backup diferencial
+          </a>
+        </div>
+
+        <div class="card-foot">
+          <span class="meta"><i class="fa-regular fa-clock"></i> Último: Hoy 12:43</span>
+          <span class="meta ok"><i class="fa-solid fa-circle-check"></i> OK</span>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-head">
+          <div class="card-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div class="card-title">
+            <h3>Historial</h3>
+            <p>Últimas copias registradas</p>
+          </div>
+        </div>
+
+        <div class="bkp-table-wrap">
+          <table class="bkp-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Tamaño</th>
+                <th>Estado</th>
+                <th class="right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Hoy 12:43</td>
+                <td><span class="tag tag-full"><i class="fa-solid fa-box"></i> Completo</span></td>
+                <td>128 MB</td>
+                <td><span class="bkp-badge ok"><i class="fa-solid fa-circle-check"></i> OK</span></td>
+                <td class="right">
+                  <div class="row-actions">
+                    <button class="btn small" type="button"><i class="fa-solid fa-download"></i> Descargar</button>
+                    <button class="btn small" type="button"><i class="fa-solid fa-trash"></i> Borrar</button>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td>Ayer 03:10</td>
+                <td><span class="tag tag-inc"><i class="fa-solid fa-rotate"></i> Incremental</span></td>
+                <td>12 MB</td>
+                <td><span class="bkp-badge warn"><i class="fa-solid fa-triangle-exclamation"></i> Pendiente</span></td>
+                <td class="right">
+                  <div class="row-actions">
+                    <button class="btn small primary" type="button"><i class="fa-solid fa-play"></i> Reintentar</button>
+                  </div>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card-foot">
+          <span class="meta"><i class="fa-regular fa-circle-question"></i> En el MVP el historial es estático</span>
+        </div>
+      </article>
+    </section>
+
+  </main>
+</div>
+
+<section id="modal-completo" class="modal">
+  <a href="#" class="modal__overlay" aria-label="Cerrar"></a>
+  <div class="modal__dialog" role="dialog" aria-modal="true" aria-label="Backup completo">
+    <div class="modal__head">
+      <div class="modal__title">
+        <h3><i class="fa-solid fa-box"></i> Backup completo</h3>
+        <p>Recomendado para una copia base</p>
+      </div>
+      <a class="modal__close" href="#" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+    </div>
+
+    <form class="bkp-form" method="POST" action="/backups/run">
+      <input type="hidden" name="type" value="full">
+
+      <div class="form-grid">
+        <label class="field">
+          <span>Base de datos</span>
+          <input name="db" placeholder="Ej: employees" required>
+        </label>
+
+        <label class="field">
+          <span>Carpeta destino</span>
+          <input name="dest" placeholder="/home/dasc/backups" value="/home/dasc/backups" required>
+        </label>
+
+        <label class="field">
+          <span>Nombre del archivo</span>
+          <input name="name" placeholder="backup-completo-YYYYMMDD.sql.gz" required>
+        </label>
+
+        <label class="field">
+          <span>Compresión</span>
+          <select name="compress">
+            <option value="gzip" selected>GZIP (.gz)</option>
+            <option value="none">Sin compresión</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Tiempo</span>
+          <select name="retention">
+            <option value="7">Conservar 7 días</option>
+            <option value="14">Conservar 14 días</option>
+            <option value="30" selected>Conservar 30 días</option>
+            <option value="0">No borrar automáticamente</option>
+          </select>
+        </label>
+
+        <label class="field field--full">
+          <span>Notas (opcional)</span>
+          <input name="notes" placeholder="Ej: Antes de actualizar el sistema">
+        </label>
+      </div>
+
+      <div class="modal__foot">
+        <a class="btn" href="#"><i class="fa-solid fa-ban"></i> Cancelar</a>
+        <button class="btn primary" type="submit"><i class="fa-solid fa-play"></i> Ejecutar ahora</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section id="modal-incremental" class="modal">
+  <a href="#" class="modal__overlay" aria-label="Cerrar"></a>
+  <div class="modal__dialog" role="dialog" aria-modal="true" aria-label="Backup incremental">
+    <div class="modal__head">
+      <div class="modal__title">
+        <h3><i class="fa-solid fa-rotate"></i> Backup incremental</h3>
+        <p>Guarda cambios desde el último backup</p>
+      </div>
+      <a class="modal__close" href="#" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+    </div>
+
+    <form class="bkp-form" method="POST" action="/backups/run">
+      <input type="hidden" name="type" value="incremental">
+
+      <div class="callout">
+        <i class="fa-solid fa-circle-info"></i>
+        <div>
+          <strong>Requisito:</strong> se recomienda tener una copia completa reciente como base.
         </div>
       </div>
 
-      <form method="POST" action="/backups/run">
-        <div class="simple-form-grid">
-          <div class="field-block">
-            <label>Tipo</label>
-            <select name="type" required>
-              <option value="full">Completo</option>
-              <option value="incremental">Incremental</option>
-              <option value="differential">Diferencial</option>
-            </select>
-          </div>
+      <div class="form-grid">
+        <label class="field">
+          <span>Base de datos</span>
+          <input name="db" placeholder="Ej: employees" value="employees" required>
+        </label>
 
-          <div class="field-block">
-            <label>Base de datos</label>
-            <input type="text" name="db" placeholder="Ej: employees" required>
-          </div>
+        <label class="field">
+          <span>Carpeta destino</span>
+          <input name="dest" placeholder="/home/dasc/backups" value="/home/dasc/backups" required>
+        </label>
 
-          <div class="field-block">
-            <label>Carpeta destino</label>
-            <input type="text" name="dest" value="/home/dasc/backups" required>
-          </div>
+        <label class="field">
+          <span>Base (último backup)</span>
+          <select name="base_ref" required>
+            <option value="latest" selected>Usar el último disponible</option>
+            <option value="manual">Seleccionar manualmente (MVP)</option>
+          </select>
+        </label>
 
-          <div class="field-block">
-            <label>Nombre del archivo</label>
-            <input type="text" name="name" placeholder="backup-YYYYMMDD.sql.gz" required>
-          </div>
+        <label class="field">
+          <span>Nombre del archivo</span>
+          <input name="name" placeholder="backup-inc-YYYYMMDD-HHMM.sql.gz" required>
+        </label>
 
-          <div class="field-block">
-            <label>Compresión</label>
-            <select name="compress">
-              <option value="gzip">GZIP</option>
-              <option value="none">Sin compresión</option>
-            </select>
-          </div>
+        <label class="field">
+          <span>Compresión</span>
+          <select name="compress">
+            <option value="gzip" selected>GZIP (.gz)</option>
+            <option value="none">Sin compresión</option>
+          </select>
+        </label>
 
-          <div class="field-block">
-            <label>Retención</label>
-            <select name="retention">
-              <option value="7">7 días</option>
-              <option value="14">14 días</option>
-              <option value="30">30 días</option>
-              <option value="0">No borrar</option>
-            </select>
-          </div>
+        <label class="field">
+          <span>Retención</span>
+          <select name="retention">
+            <option value="7" selected>Conservar 7 días</option>
+            <option value="14">Conservar 14 días</option>
+            <option value="30">Conservar 30 días</option>
+            <option value="0">No borrar automáticamente</option>
+          </select>
+        </label>
+      </div>
 
-          <div class="field-block">
-            <label>Referencia base</label>
-            <input type="text" name="base_ref" placeholder="latest / last_full / manual">
-          </div>
+      <div class="modal__foot">
+        <a class="btn" href="#"><i class="fa-solid fa-ban"></i> Cancelar</a>
+        <button class="btn primary" type="submit"><i class="fa-solid fa-play"></i> Ejecutar ahora</button>
+      </div>
+    </form>
+  </div>
+</section>
 
-          <div class="field-block">
-            <label>Notas</label>
-            <input type="text" name="notes" placeholder="Opcional">
-          </div>
-        </div>
+<section id="modal-diferencial" class="modal">
+  <a href="#" class="modal__overlay" aria-label="Cerrar"></a>
+  <div class="modal__dialog" role="dialog" aria-modal="true" aria-label="Backup diferencial">
+    <div class="modal__head">
+      <div class="modal__title">
+        <h3><i class="fa-solid fa-layer-group"></i> Backup diferencial</h3>
+        <p>Guarda cambios desde el último backup completo</p>
+      </div>
+      <a class="modal__close" href="#" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+    </div>
 
-        <div class="form-actions">
-          <button class="btn primary" type="submit">
-            <i class="fa-solid fa-play"></i> Ejecutar backup
-          </button>
-        </div>
-      </form>
-    </section>
-  </main>
-</div>
+    <form class="bkp-form" method="POST" action="/backups/run">
+      <input type="hidden" name="type" value="differential">
+
+      <div class="form-grid">
+        <label class="field">
+          <span>Base de datos</span>
+          <input name="db" placeholder="Ej: employees" value="employees" required>
+        </label>
+
+        <label class="field">
+          <span>Carpeta destino</span>
+          <input name="dest" placeholder="/home/dasc/backups" value="/home/dasc/backups" required>
+        </label>
+
+        <label class="field">
+          <span>Referencia</span>
+          <select name="base_ref" required>
+            <option value="last_full" selected>Último backup completo</option>
+            <option value="manual">Seleccionar manualmente (MVP)</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Nombre del archivo</span>
+          <input name="name" placeholder="backup-diff-YYYYMMDD-HHMM.sql.gz" required>
+        </label>
+
+        <label class="field">
+          <span>Compresión</span>
+          <select name="compress">
+            <option value="gzip" selected>GZIP (.gz)</option>
+            <option value="none">Sin compresión</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Retención</span>
+          <select name="retention">
+            <option value="7">Conservar 7 días</option>
+            <option value="14" selected>Conservar 14 días</option>
+            <option value="30">Conservar 30 días</option>
+            <option value="0">No borrar automáticamente</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="modal__foot">
+        <a class="btn" href="#"><i class="fa-solid fa-ban"></i> Cancelar</a>
+        <button class="btn primary" type="submit"><i class="fa-solid fa-play"></i> Ejecutar ahora</button>
+      </div>
+    </form>
+  </div>
+</section>
 
 </body>
 </html>
