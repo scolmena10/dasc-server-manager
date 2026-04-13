@@ -137,7 +137,7 @@ ls -l "${INSTALL_BACKUP_SCRIPT}"
 ls -l "${INSTALL_SERVICES_SCRIPT}"
 ls -ld "${BACKUP_DIR}"
 sudo -u "${APP_USER}" test -f "${APP_HOME}/.my.cnf" && echo ".my.cnf OK"
-if sudo -u "${APP_USER}" mysqldump --protocol=tcp --databases "${DB_NAME}" | head -n 5; then
+if sudo -u "${APP_USER}" MYSQL_DEFAULTS_FILE="${APP_HOME}/.my.cnf" mysqldump --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp --single-transaction --databases "${DB_NAME}" >/dev/null; then
   echo "Prueba mysqldump OK"
 else
   echo "AVISO: la prueba mysqldump ha fallado. Revisa DB_HOST, usuario o permisos."

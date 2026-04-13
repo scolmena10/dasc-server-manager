@@ -3,18 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DASC Service - Server Manager</title>
-
-    <!-- CSS -->
+    <title>DASC · Panel</title>
     <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
-
-    <!-- ICONOS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
-
 <body>
-
 <header class="header">
     <a href="/" class="brand">
         <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
@@ -24,7 +17,7 @@
         </div>
     </a>
 
-    <h1>DASC Service</h1>
+    <h1>Panel principal</h1>
 
     <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
         <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
@@ -32,120 +25,166 @@
 </header>
 
 <div class="layout">
-
     <aside class="sidebar">
         <h2>Menú</h2>
-
         <nav class="menu">
-            <a href="/backups">
-                <i class="fa-solid fa-database"></i> Copias
-            </a>
-            <a href="/logs">
-                <i class="fa-solid fa-file-lines"></i> Logs
-            </a>
-            <a href="/servicios">
-                <i class="fa-solid fa-server"></i> Servicios
-            </a>
-            <a href="/documentacion">
-                <i class="fa-solid fa-book"></i> Documentación
-            </a>
+            <a href="/" class="active"><i class="fa-solid fa-house"></i> Panel</a>
+            {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+            {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+            {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
+            {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
         </nav>
 
         <div class="history">
-            <h3>Historial</h3>
-            <p><span class="dot ok"></span> Backup completo OK</p>
-            <p><span class="dot warn"></span> Incremental pendiente</p>
-            <p><span class="dot ok"></span> Logs consultados</p>
+            <h3>Tu acceso</h3>
+            <p><span class="dot ok"></span> Rol: {{ role_label }}</p>
+            <p><span class="dot ok"></span> Secciones visibles: {{ managed_sections }}</p>
+            {% if permission_labels %}
+                <p><span class="dot ok"></span> Permisos: {{ permission_labels | join(', ') }}</p>
+            {% else %}
+                <p><span class="dot off"></span> Sin permisos específicos</p>
+            {% endif %}
         </div>
     </aside>
 
     <main class="main">
+        {% if msg %}
+        <div class="notice warning">
+            <i class="fa-solid fa-circle-info"></i>
+            <div>{{ msg }}</div>
+        </div>
+        {% endif %}
 
         <div class="topbar">
             <div>
-                <h2 class="page-title">Panel de Control</h2>
-                <p class="page-subtitle">Proyecto DASC Service</p>
+                <h2 class="page-title">Bienvenido, {{ user }}</h2>
+                <p class="page-subtitle">Accede rápido a las funciones del MVP y comprueba de un vistazo qué tienes habilitado.</p>
             </div>
-
-            <div class="status-pill">
-                <i class="fa-solid fa-shield-halved"></i>
-                Estado: <strong>Operativo</strong>
+            <div class="topbar-actions">
+                <div class="status-pill"><i class="fa-solid fa-user"></i> {{ role_label }}</div>
+                <div class="status-pill"><i class="fa-solid fa-key"></i> {{ permissions_count }} permisos</div>
+                <form method="post" action="/logout" class="logout-form">
+                    <button type="submit" class="btn"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
+                </form>
             </div>
         </div>
 
-        <section class="grid">
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Secciones disponibles</div>
+                    <div class="kpi-value">{{ managed_sections }}</div>
+                </div>
+                <i class="fa-solid fa-table-cells-large"></i>
+            </div>
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Permisos activos</div>
+                    <div class="kpi-value ok">{{ permissions_count }}</div>
+                </div>
+                <i class="fa-solid fa-shield-halved"></i>
+            </div>
+            {% if is_admin %}
+            <div class="kpi-card">
+                <div>
+                    <div class="kpi-label">Usuarios gestionables</div>
+                    <div class="kpi-value">{{ users_count }}</div>
+                </div>
+                <i class="fa-solid fa-users"></i>
+            </div>
+            {% endif %}
+        </div>
 
-            <!-- BACKUPS -->
+        <section class="grid">
+            {% if can_backups %}
             <article class="card">
                 <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-solid fa-database"></i>
-                    </div>
+                    <div class="card-icon"><i class="fa-solid fa-database"></i></div>
                     <div class="card-title">
-                        <h3>Copias de Seguridad</h3>
-                        <p>Crea copias manualmente</p>
+                        <h3>Copias de seguridad</h3>
+                        <p>Lanza backups completos, incrementales y diferenciales desde el panel.</p>
                     </div>
                 </div>
-
                 <div class="actions">
-                    <a class="btn primary" href="/backups">
-                        <i class="fa-solid fa-box"></i> Backup completo
-                    </a>
-                    <a class="btn" href="/backups">
-                        <i class="fa-solid fa-rotate"></i> Backup incremental
-                    </a>
-                    <a class="btn" href="/backups">
-                        <i class="fa-solid fa-layer-group"></i> Backup diferencial
-                    </a>
+                    <a class="btn primary" href="/backups"><i class="fa-solid fa-box"></i> Abrir copias</a>
+                </div>
+                <div class="card-foot">
+                    <span class="meta"><i class="fa-solid fa-circle-info"></i> Preparado para demo del MVP</span>
                 </div>
             </article>
+            {% endif %}
 
-            <!-- LOGS -->
+            {% if can_logs %}
             <article class="card">
                 <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-solid fa-file-lines"></i>
-                    </div>
+                    <div class="card-icon"><i class="fa-solid fa-file-lines"></i></div>
                     <div class="card-title">
                         <h3>Logs</h3>
-                        <p>Revisa registros del sistema</p>
+                        <p>Consulta auditoría del panel y abre Cacti para monitorización.</p>
                     </div>
                 </div>
-
                 <div class="actions">
-                    <a class="btn primary" href="#" onclick="window.open(window.location.protocol + '//' + window.location.hostname + '/cacti/', '_blank'); return false;">
-                        <i class="fa-solid fa-eye"></i> Ver Cacti
-                    </a>
-                    <a class="btn ghost" href="/logs">
-                        <i class="fa-solid fa-chart-line"></i> Panel de logs
-                    </a>
+                    <a class="btn primary" href="/logs"><i class="fa-solid fa-chart-line"></i> Ver logs</a>
+                </div>
+                <div class="card-foot">
+                    <span class="meta"><i class="fa-solid fa-clipboard-list"></i> Auditoría centralizada</span>
                 </div>
             </article>
+            {% endif %}
 
-            <!-- SERVICIOS -->
-            <article class="card card-mini">
+            {% if can_servicios %}
+            <article class="card">
                 <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-solid fa-server"></i>
-                    </div>
+                    <div class="card-icon"><i class="fa-solid fa-server"></i></div>
                     <div class="card-title">
                         <h3>Servicios</h3>
-                        <p>Gestiona servicios remotos</p>
+                        <p>Inicia, detén o reinicia servicios remotos del sistema.</p>
                     </div>
                 </div>
-
                 <div class="actions">
-                    <a class="btn" href="/servicios">
-                        <i class="fa-solid fa-gear"></i> Gestionar todos
-                    </a>
+                    <a class="btn primary" href="/servicios"><i class="fa-solid fa-gear"></i> Gestionar servicios</a>
+                </div>
+                <div class="card-foot">
+                    <span class="meta"><i class="fa-solid fa-bolt"></i> Control rápido por SSH</span>
                 </div>
             </article>
+            {% endif %}
 
+            {% if is_admin %}
+            <article class="card">
+                <div class="card-head">
+                    <div class="card-icon"><i class="fa-solid fa-user-shield"></i></div>
+                    <div class="card-title">
+                        <h3>Administración</h3>
+                        <p>Crea usuarios, revisa permisos y prepara cuentas para la demo.</p>
+                    </div>
+                </div>
+                <div class="actions">
+                    <a class="btn primary" href="/admin/usuarios"><i class="fa-solid fa-user-plus"></i> Gestionar usuarios</a>
+                </div>
+                <div class="card-foot">
+                    <span class="meta ok"><i class="fa-solid fa-crown"></i> Acceso exclusivo de administrador</span>
+                </div>
+            </article>
+            {% endif %}
         </section>
 
+        <section class="card card-mini" style="margin-top: 18px;">
+            <div class="card-head">
+                <div class="card-icon"><i class="fa-solid fa-lightbulb"></i></div>
+                <div class="card-title">
+                    <h3>Qué he reforzado para el MVP</h3>
+                    <p>La idea es que el panel ya transmita producto, no solo funcionalidad técnica.</p>
+                </div>
+            </div>
+            <div class="list-inline">
+                <span class="badge-soft"><i class="fa-solid fa-check"></i> Menú coherente en todas las vistas</span>
+                <span class="badge-soft"><i class="fa-solid fa-check"></i> Acceso admin visible donde toca</span>
+                <span class="badge-soft"><i class="fa-solid fa-check"></i> Mejor jerarquía visual</span>
+                <span class="badge-soft"><i class="fa-solid fa-check"></i> Resumen rápido de permisos</span>
+            </div>
+        </section>
     </main>
-
 </div>
-
 </body>
 </html>

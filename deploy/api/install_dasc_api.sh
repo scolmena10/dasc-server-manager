@@ -36,7 +36,7 @@ done
 
 echo "==> Instalando dependencias del sistema"
 apt update
-apt install -y python3 python3-venv python3-pip openssh-client curl sshpass
+apt install -y python3 python3-venv python3-pip openssh-client curl sshpass rsync
 
 echo "==> Creando estructura destino"
 mkdir -p "$PADRE_DIR"
