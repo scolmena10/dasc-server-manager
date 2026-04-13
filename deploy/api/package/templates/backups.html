@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>DASC · Copias</title>
   <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', path='css/backups.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
@@ -54,7 +55,6 @@
     <div class="topbar">
       <div>
         <h2 class="page-title">Gestión de copias</h2>
-        <p class="page-subtitle">He dejado la vista más presentable para el MVP y más clara para que se entienda qué es real ahora y qué queda preparado para la versión final.</p>
       </div>
       <div class="topbar-actions">
         <div class="status-pill"><i class="fa-solid fa-user"></i> {{ user }}</div>
@@ -62,30 +62,6 @@
         <form method="post" action="/logout" class="logout-form">
           <button type="submit" class="btn"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
         </form>
-      </div>
-    </div>
-
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div>
-          <div class="kpi-label">Tipos visibles</div>
-          <div class="kpi-value">3</div>
-        </div>
-        <i class="fa-solid fa-layer-group"></i>
-      </div>
-      <div class="kpi-card">
-        <div>
-          <div class="kpi-label">Endpoint manual</div>
-          <div class="kpi-value ok">/backups/run</div>
-        </div>
-        <i class="fa-solid fa-play"></i>
-      </div>
-      <div class="kpi-card">
-        <div>
-          <div class="kpi-label">Enfoque actual</div>
-          <div class="kpi-value warn">MVP</div>
-        </div>
-        <i class="fa-solid fa-flag"></i>
       </div>
     </div>
 
@@ -98,58 +74,110 @@
             <p>Elige el tipo de backup y abre su formulario.</p>
           </div>
         </div>
-
+    
         <div class="actions">
           <a class="btn primary" href="#modal-completo"><i class="fa-solid fa-box"></i> Backup completo</a>
           <a class="btn" href="#modal-incremental"><i class="fa-solid fa-rotate"></i> Backup incremental</a>
           <a class="btn" href="#modal-diferencial"><i class="fa-solid fa-layer-group"></i> Backup diferencial</a>
         </div>
-
+    
         <div class="card-foot">
-          <span class="meta"><i class="fa-solid fa-circle-info"></i> Los tres formularios quedan preparados para la demo</span>
+          <span class="meta">
+            <i class="fa-solid fa-circle-info"></i>
+            Los tres formularios quedan preparados para la demo
+          </span>
         </div>
       </article>
-
+    
       <article class="card">
         <div class="card-head">
           <div class="card-icon"><i class="fa-solid fa-circle-info"></i></div>
           <div class="card-title">
-            <h3>Notas de producto</h3>
-            <p>Lo que comunica mejor el alcance real del MVP.</p>
+            <h3>Notas del producto</h3>
+            <p>Ayudas y explicaciones intuitivas para el usuario.</p>
           </div>
         </div>
-
+    
         <div class="help-grid">
           <div class="help-box">
             <h4><i class="fa-solid fa-check"></i> Completo</h4>
-            <p>Es la copia más sólida para la demo y la base natural para restauración futura.</p>
+            <p>
+              Crea una copia íntegra de la base de datos seleccionada. Es la opción más recomendable
+              para copias iniciales, pruebas de restauración y puntos de seguridad claros antes de
+              realizar cambios importantes.
+            </p>
           </div>
+    
           <div class="help-box">
             <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Incremental</h4>
-            <p>La UI ya existe para enseñar evolución del producto aunque la lógica siga simplificada.</p>
+            <p>
+              Guarda únicamente los cambios realizados desde la última copia de referencia. Está
+              pensada para reducir espacio y acelerar procesos, y queda preparada en la interfaz para
+              la evolución completa del sistema.
+            </p>
           </div>
+    
           <div class="help-box">
             <h4><i class="fa-solid fa-list-check"></i> Diferencial</h4>
-            <p>Queda presentada de forma profesional sin fingir aún un historial real completo.</p>
+            <p>
+              Genera una copia con los cambios acumulados desde la última copia completa. Es útil
+              cuando se quiere un equilibrio entre rapidez de restauración y menor volumen de
+              almacenamiento.
+            </p>
           </div>
         </div>
-
-        <div class="card-foot">
-          <span class="meta ok"><i class="fa-solid fa-eye"></i> En esta versión he quitado navegación rota y menús viejos</span>
+      </article>
+    
+      <article class="card card-mini">
+        <div class="card-head">
+          <div class="card-icon"><i class="fa-solid fa-book-open"></i></div>
+          <div class="card-title">
+            <h3>Funciones relacionadas</h3>
+            <p>Más información para entender la evolución del módulo de copias.</p>
+          </div>
+        </div>
+    
+        <div class="help-grid">
+          <div class="help-box">
+            <h4><i class="fa-regular fa-clock"></i> Copias automáticas y programadas</h4>
+            <p>
+              Permite definir copias periódicas para no depender de ejecuciones manuales. La idea es
+              que el sistema pueda mantener una rutina estable de protección según la frecuencia
+              configurada por el usuario.
+            </p>
+          </div>
+    
+          <div class="help-box">
+            <h4><i class="fa-solid fa-rotate-left"></i> Restauración</h4>
+            <p>
+              Será la función encargada de recuperar un punto anterior de la base de datos a partir de
+              una copia disponible. Está pensada para resolver errores, pérdidas de información o
+              volver a un estado conocido del sistema.
+            </p>
+          </div>
+    
+          <div class="help-box">
+            <h4><i class="fa-solid fa-folder-open"></i> Historial de copias</h4>
+            <p>
+              Mostrará el registro de copias realizadas con su fecha, tipo, resultado y ubicación. De
+              esta manera el usuario podrá revisar rápidamente qué se ha ejecutado y qué punto de
+              respaldo tiene disponible.
+            </p>
+          </div>
         </div>
       </article>
     </section>
 
+    
     <section class="card card-mini" style="margin-top: 18px;">
       <div class="card-head">
         <div class="card-icon"><i class="fa-solid fa-clipboard-list"></i></div>
         <div class="card-title">
           <h3>Historial en el MVP</h3>
-          <p>Lo he dejado honesto visualmente para no vender como real algo que aún no está implementado.</p>
         </div>
       </div>
       <div class="empty-state">
-        <p><strong>Historial dinámico pendiente.</strong> Ahora mismo la ejecución sí funciona, pero la tabla completa de descargas, borrado y listado automático de ficheros debería salir del servidor de backups en una siguiente iteración.</p>
+        <p><strong>Historial dinámico pendiente.</strong></p>
       </div>
     </section>
   </main>
