@@ -17,7 +17,8 @@
             flex-wrap: wrap;
         }
 
-        .logout-form {
+        .logout-form,
+        .inline-form {
             margin: 0;
         }
 
@@ -52,49 +53,6 @@
         .span-8 { grid-column: span 8; }
         .span-12 { grid-column: span 12; }
 
-        .status-dot {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 999px;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-
-        .status-dot.ok { background: #16a34a; }
-        .status-dot.error { background: #dc2626; }
-        .status-dot.warn { background: #f59e0b; }
-
-        .channel-list,
-        .rules-list,
-        .delivery-list {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 12px;
-        }
-
-        .channel-list th,
-        .channel-list td,
-        .rules-list th,
-        .rules-list td,
-        .delivery-list th,
-        .delivery-list td {
-            padding: 12px;
-            border: 1px solid #e5e7eb;
-            text-align: left;
-            vertical-align: middle;
-        }
-
-        .channel-list th,
-        .rules-list th,
-        .delivery-list th {
-            background: #f8fafc;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #64748b;
-        }
-
         .badge {
             display: inline-flex;
             align-items: center;
@@ -104,6 +62,7 @@
             font-size: 12px;
             font-weight: 700;
             border: 1px solid transparent;
+            white-space: nowrap;
         }
 
         .badge.ok {
@@ -128,6 +87,32 @@
             background: #eff6ff;
             color: #1d4ed8;
             border-color: #bfdbfe;
+        }
+
+        .mini-stat {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 14px;
+            background: #ffffff;
+            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        }
+
+        .mini-stat .stat-label {
+            color: #6b7280;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .mini-stat .stat-value {
+            font-size: 24px;
+            font-weight: 800;
+            color: #111827;
+        }
+
+        .mini-stat .stat-sub {
+            margin-top: 8px;
+            font-size: 12px;
+            color: #6b7280;
         }
 
         .kv-grid {
@@ -166,10 +151,6 @@
             margin-top: 16px;
         }
 
-        .inline-form {
-            margin: 0;
-        }
-
         .muted-box {
             border: 1px dashed #cbd5e1;
             border-radius: 12px;
@@ -179,45 +160,90 @@
             font-size: 14px;
         }
 
-        .mini-stat {
+        .table-wrap {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 14px;
             border: 1px solid #e5e7eb;
             border-radius: 14px;
-            padding: 14px;
-            background: #ffffff;
-            box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+            background: #fff;
         }
 
-        .mini-stat .stat-label {
-            color: #6b7280;
-            font-size: 13px;
-            margin-bottom: 8px;
+        .table-wrap table {
+            width: 100%;
+            border-collapse: collapse;
         }
 
-        .mini-stat .stat-value {
-            font-size: 24px;
-            font-weight: 800;
-            color: #111827;
+        .table-wrap th,
+        .table-wrap td {
+            padding: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            text-align: left;
+            vertical-align: middle;
         }
 
-        .mini-stat .stat-sub {
-            margin-top: 8px;
+        .table-wrap th {
+            background: #f8fafc;
             font-size: 12px;
-            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
         }
 
-        .test-result {
-            margin-top: 14px;
-            display: none;
+        .table-wrap tr:last-child td {
+            border-bottom: 0;
         }
 
-        .test-result.show {
+        .simple-form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+            margin-top: 18px;
+        }
+
+        .simple-form-grid input,
+        .simple-form-grid select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            background: #0f172a;
+            color: #fff;
+            box-sizing: border-box;
+        }
+
+        .field-block label {
             display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .row-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .row-actions .btn {
+            padding: 9px 12px;
+            font-size: 13px;
+            border-radius: 10px;
         }
 
         .empty-state {
             text-align: center;
             color: #6b7280;
             padding: 18px;
+        }
+
+        .help-list {
+            margin: 12px 0 0 18px;
+            color: #475569;
+        }
+
+        .help-list li {
+            margin-bottom: 8px;
         }
 
         @media (max-width: 980px) {
@@ -259,28 +285,25 @@
         </nav>
 
         <div class="history">
-            <h3>Resumen</h3>
-            <p><span class="dot ok"></span> Eventos registrados: {{ alerts_total or 0 }}</p>
-            <p><span class="dot ok"></span> Entregas OK: {{ alerts_ok or 0 }}</p>
-            <p><span class="dot warn"></span> Entregas con error: {{ alerts_error or 0 }}</p>
+            <h3>Estado del módulo</h3>
+            <p><span class="dot ok"></span> Canal Telegram disponible</p>
+            <p><span class="dot ok"></span> Reglas configurables</p>
+            <p><span class="dot ok"></span> Historial de entregas</p>
+            <p><span class="dot warn"></span> Multiempresa MVP</p>
         </div>
     </aside>
 
     <main class="main">
         {% if ok == "1" %}
-        <div class="alert-box success">
-            <i class="fa-solid fa-circle-check"></i> {{ msg or "Acción realizada correctamente." }}
-        </div>
+        <div class="alert-box success"><i class="fa-solid fa-circle-check"></i> {{ msg or "Cambios guardados correctamente." }}</div>
         {% elif ok == "0" %}
-        <div class="alert-box error">
-            <i class="fa-solid fa-triangle-exclamation"></i> {{ msg or "Se ha producido un error." }}
-        </div>
+        <div class="alert-box error"><i class="fa-solid fa-triangle-exclamation"></i> {{ msg or "Se produjo un error al guardar los cambios." }}</div>
         {% endif %}
 
         <div class="topbar">
             <div>
-                <h2 class="page-title">Centro de Alertas</h2>
-                <p class="page-subtitle">Configura Telegram, revisa reglas y consulta el historial de envíos</p>
+                <h2 class="page-title">Alertas y destinatarios</h2>
+                <p class="page-subtitle">Gestiona Telegram, reglas, grupos, usuarios y entregas del sistema.</p>
             </div>
 
             <div class="topbar-actions">
@@ -298,267 +321,320 @@
         </div>
 
         <section class="grid-3">
-            <article class="mini-stat span-4">
+            <article class="mini-stat span-3 span-4">
                 <div class="stat-label">Eventos totales</div>
                 <div class="stat-value">{{ alerts_total or 0 }}</div>
-                <div class="stat-sub">Eventos internos generados por el panel</div>
+                <div class="stat-sub">Eventos registrados en SQLite</div>
             </article>
 
-            <article class="mini-stat span-4">
-                <div class="stat-label">Entregas realizadas</div>
-                <div class="stat-value">{{ alerts_deliveries or 0 }}</div>
-                <div class="stat-sub">Intentos de envío a canales configurados</div>
+            <article class="mini-stat span-3 span-4">
+                <div class="stat-label">Entregas correctas</div>
+                <div class="stat-value">{{ alerts_ok or 0 }}</div>
+                <div class="stat-sub">Mensajes enviados correctamente</div>
             </article>
 
-            <article class="mini-stat span-4">
-                <div class="stat-label">Última entrega</div>
-                <div class="stat-value" style="font-size:16px; line-height:1.3;">{{ alerts_last or "Sin envíos todavía" }}</div>
-                <div class="stat-sub">Último registro guardado en historial</div>
+            <article class="mini-stat span-3 span-4">
+                <div class="stat-label">Entregas con error</div>
+                <div class="stat-value">{{ alerts_error or 0 }}</div>
+                <div class="stat-sub">Revisar token, chat_id o conectividad</div>
+            </article>
+        </section>
+
+        <section class="grid-3">
+            <article class="card span-4">
+                <div class="card-head">
+                    <div class="card-icon"><i class="fa-solid fa-paper-plane"></i></div>
+                    <div class="card-title">
+                        <h3>Canal Telegram</h3>
+                        <p>Estado general del canal y prueba manual.</p>
+                    </div>
+                </div>
+
+                {% set telegram_channel = channels | selectattr('code', 'equalto', 'telegram') | list %}
+                {% set tg = telegram_channel[0] if telegram_channel else None %}
+
+                <div class="kv-grid">
+                    <div class="kv-item">
+                        <div class="label">Canal</div>
+                        <div class="value">Telegram</div>
+                    </div>
+                    <div class="kv-item">
+                        <div class="label">Estado</div>
+                        <div class="value">
+                            {% if tg and tg.is_enabled %}
+                            <span class="badge ok"><i class="fa-solid fa-circle-check"></i> Activo</span>
+                            {% else %}
+                            <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> Inactivo</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="kv-item">
+                        <div class="label">Destino por defecto</div>
+                        <div class="value">{{ tg.destination if tg and tg.destination else 'No configurado' }}</div>
+                    </div>
+                    <div class="kv-item">
+                        <div class="label">Última entrega</div>
+                        <div class="value">{{ alerts_last or 'Sin datos' }}</div>
+                    </div>
+                </div>
+
+                <div class="actions-row">
+                    <form method="post" action="/alertas/channel/toggle" class="inline-form">
+                        <input type="hidden" name="channel_code" value="telegram">
+                        <button class="btn" type="submit">
+                            <i class="fa-solid fa-power-off"></i>
+                            {% if tg and tg.is_enabled %}Desactivar canal{% else %}Activar canal{% endif %}
+                        </button>
+                    </form>
+
+                    <form method="post" action="/alertas/test" class="inline-form">
+                        <button class="btn primary" type="submit">
+                            <i class="fa-solid fa-flask"></i> Enviar prueba Telegram
+                        </button>
+                    </form>
+                </div>
+            </article>
+
+            <article class="card span-8">
+                <div class="card-head">
+                    <div class="card-icon"><i class="fa-solid fa-users"></i></div>
+                    <div class="card-title">
+                        <h3>Destinatarios Telegram</h3>
+                        <p>Usa el mismo bot y añade grupos o usuarios individuales.</p>
+                    </div>
+                </div>
+
+                <div class="muted-box">
+                    <strong>Recomendado para el MVP:</strong> crear un grupo de Telegram por empresa, añadir el bot y usar ese único <code>chat_id</code>. También puedes añadir usuarios individuales si cada persona ha hablado con el bot antes.
+                </div>
+
+                <form method="post" action="/alertas/recipient/add">
+                    <div class="simple-form-grid">
+                        <div class="field-block">
+                            <label>Empresa</label>
+                            <input type="text" name="company" placeholder="Ej: Cliente Demo" required>
+                        </div>
+                        <div class="field-block">
+                            <label>Nombre visible</label>
+                            <input type="text" name="name" placeholder="Ej: Grupo Alertas IT" required>
+                        </div>
+                        <div class="field-block">
+                            <label>Tipo</label>
+                            <select name="kind" required>
+                                <option value="group">Grupo (recomendado)</option>
+                                <option value="user">Usuario individual</option>
+                            </select>
+                        </div>
+                        <div class="field-block">
+                            <label>Chat ID</label>
+                            <input type="text" name="destination" placeholder="Ej: -1001234567890 o 5883797612" required>
+                        </div>
+                    </div>
+
+                    <div class="actions-row">
+                        <button class="btn primary" type="submit">
+                            <i class="fa-solid fa-plus"></i> Guardar destinatario
+                        </button>
+                        <a class="btn" href="{{ manual_url or '/static/docs/guia_alertas_telegram.pdf' }}" target="_blank" rel="noopener">
+                            <i class="fa-solid fa-book"></i> Manual para obtener chat_id
+                        </a>
+                    </div>
+                </form>
+
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Empresa</th>
+                                <th>Nombre</th>
+                                <th>Tipo</th>
+                                <th>Destino</th>
+                                <th>Estado</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in recipients or [] %}
+                            <tr>
+                                <td>{{ r.company or '-' }}</td>
+                                <td>{{ r.name }}</td>
+                                <td>
+                                    {% if r.kind == 'group' %}
+                                    <span class="badge info"><i class="fa-solid fa-user-group"></i> Grupo</span>
+                                    {% else %}
+                                    <span class="badge warn"><i class="fa-solid fa-user"></i> Usuario</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ r.destination }}</td>
+                                <td>
+                                    {% if r.is_enabled %}
+                                    <span class="badge ok"><i class="fa-solid fa-circle-check"></i> Activo</span>
+                                    {% else %}
+                                    <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> Inactivo</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        <form method="post" action="/alertas/recipient/toggle" class="inline-form">
+                                            <input type="hidden" name="recipient_id" value="{{ r.id }}">
+                                            <button class="btn" type="submit"><i class="fa-solid fa-repeat"></i> Activar / desactivar</button>
+                                        </form>
+                                        <form method="post" action="/alertas/recipient/delete" class="inline-form" onsubmit="return confirm('¿Eliminar destinatario?');">
+                                            <input type="hidden" name="recipient_id" value="{{ r.id }}">
+                                            <button class="btn" type="submit"><i class="fa-solid fa-trash"></i> Eliminar</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                            {% if not recipients %}
+                            <tr>
+                                <td colspan="6" class="empty-state">No hay destinatarios guardados todavía.</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
             </article>
         </section>
 
         <section class="grid-3">
             <article class="card span-6">
                 <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-brands fa-telegram"></i>
-                    </div>
+                    <div class="card-icon"><i class="fa-solid fa-sliders"></i></div>
                     <div class="card-title">
-                        <h3>Canales disponibles</h3>
-                        <p>Estado actual de Telegram y resto de canales configurables</p>
+                        <h3>Reglas activas</h3>
+                        <p>Decide qué eventos generan avisos.</p>
                     </div>
                 </div>
 
-                {% if channels %}
-                <table class="channel-list">
-                    <thead>
-                        <tr>
-                            <th>Canal</th>
-                            <th>Destino</th>
-                            <th>Estado</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for channel in channels %}
-                        <tr>
-                            <td><strong>{{ channel.name }}</strong><br><small>{{ channel.code }}</small></td>
-                            <td>{{ channel.destination or "No configurado" }}</td>
-                            <td>
-                                {% if channel.is_enabled %}
-                                <span class="badge ok"><i class="fa-solid fa-circle-check"></i> Activo</span>
-                                {% else %}
-                                <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> Inactivo</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <form method="post" action="/alertas/channel/toggle" class="inline-form">
-                                    <input type="hidden" name="channel_code" value="{{ channel.code }}">
-                                    <button type="submit" class="btn small {% if channel.is_enabled %}ghost{% else %}primary{% endif %}">
-                                        {% if channel.is_enabled %}Desactivar{% else %}Activar{% endif %}
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                {% else %}
-                <div class="empty-state">No hay canales registrados todavía.</div>
-                {% endif %}
-
-                <div class="actions-row">
-                    <button type="button" class="btn primary" id="btn-telegram-test">
-                        <i class="fa-solid fa-paper-plane"></i> Enviar prueba Telegram
-                    </button>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Evento</th>
+                                <th>Severidad</th>
+                                <th>Canal</th>
+                                <th>Estado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for rule in rules %}
+                            <tr>
+                                <td>{{ rule.event_code }}</td>
+                                <td>
+                                    {% if rule.severity == 'critical' %}
+                                    <span class="badge error"><i class="fa-solid fa-triangle-exclamation"></i> Critical</span>
+                                    {% elif rule.severity == 'warning' %}
+                                    <span class="badge warn"><i class="fa-solid fa-circle-exclamation"></i> Warning</span>
+                                    {% else %}
+                                    <span class="badge info"><i class="fa-solid fa-circle-info"></i> {{ rule.severity }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ rule.channel_code }}</td>
+                                <td>
+                                    {% if rule.is_enabled %}
+                                    <span class="badge ok"><i class="fa-solid fa-circle-check"></i> Activa</span>
+                                    {% else %}
+                                    <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> Inactiva</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <form method="post" action="/alertas/rule/toggle" class="inline-form">
+                                        <input type="hidden" name="rule_id" value="{{ rule.id }}">
+                                        <button class="btn" type="submit"><i class="fa-solid fa-repeat"></i> Cambiar</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            {% if not rules %}
+                            <tr>
+                                <td colspan="5" class="empty-state">No hay reglas configuradas.</td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
                 </div>
-
-                <div id="telegram-test-result" class="test-result alert-box"></div>
             </article>
 
             <article class="card span-6">
                 <div class="card-head">
-                    <div class="card-icon">
-                        <i class="fa-solid fa-circle-info"></i>
-                    </div>
+                    <div class="card-icon"><i class="fa-solid fa-book-open"></i></div>
                     <div class="card-title">
-                        <h3>Estado del módulo</h3>
-                        <p>Resumen rápido para la demo del MVP</p>
+                        <h3>Cómo usarlo en el MVP</h3>
+                        <p>Proceso recomendado para dejar Telegram listo.</p>
                     </div>
                 </div>
 
-                <div class="kv-grid">
-                    <div class="kv-item">
-                        <div class="label">Canal inicial</div>
-                        <div class="value">Telegram</div>
-                    </div>
-                    <div class="kv-item">
-                        <div class="label">Motor interno</div>
-                        <div class="value">Eventos + reglas + entregas</div>
-                    </div>
-                    <div class="kv-item">
-                        <div class="label">Base local</div>
-                        <div class="value">SQLite</div>
-                    </div>
-                    <div class="kv-item">
-                        <div class="label">Ámbitos</div>
-                        <div class="value">Backups, servicios y API</div>
-                    </div>
-                </div>
+                <ol class="help-list">
+                    <li>Crea o reutiliza vuestro bot corporativo.</li>
+                    <li>Crea un grupo por empresa en Telegram.</li>
+                    <li>Añade el bot al grupo y envía un mensaje.</li>
+                    <li>Obtén el <code>chat_id</code> del grupo con la guía PDF.</li>
+                    <li>Guarda el destinatario aquí en Alertas.</li>
+                    <li>Haz una prueba manual con el botón de prueba.</li>
+                </ol>
 
-                <div class="muted-box" style="margin-top:16px;">
-                    <strong>Consejo para la presentación:</strong> enseña primero esta pantalla, luego pulsa “Enviar prueba”, después fuerza un backup o una acción de servicio y vuelve aquí para mostrar el historial de entregas.
+                <div class="actions-row">
+                    <a class="btn primary" href="{{ manual_url or '/static/docs/guia_alertas_telegram.pdf' }}" target="_blank" rel="noopener">
+                        <i class="fa-solid fa-file-pdf"></i> Abrir guía PDF
+                    </a>
                 </div>
             </article>
         </section>
 
-        <section class="card card-mini" style="margin-top: 20px;">
+        <section class="card card-mini">
             <div class="card-head">
-                <div class="card-icon">
-                    <i class="fa-solid fa-sliders"></i>
-                </div>
+                <div class="card-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
                 <div class="card-title">
-                    <h3>Reglas de alertas</h3>
-                    <p>Activa o desactiva qué eventos generan notificación</p>
+                    <h3>Últimas entregas</h3>
+                    <p>Historial reciente de envíos realizados por el sistema.</p>
                 </div>
             </div>
 
-            {% if rules %}
-            <table class="rules-list">
-                <thead>
-                    <tr>
-                        <th>Evento</th>
-                        <th>Severidad</th>
-                        <th>Canal</th>
-                        <th>Estado</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for rule in rules %}
-                    <tr>
-                        <td><strong>{{ rule.event_code }}</strong></td>
-                        <td>
-                            {% if rule.severity == 'critical' %}
-                            <span class="badge error"><i class="fa-solid fa-triangle-exclamation"></i> Critical</span>
-                            {% elif rule.severity == 'warning' %}
-                            <span class="badge warn"><i class="fa-solid fa-circle-exclamation"></i> Warning</span>
-                            {% else %}
-                            <span class="badge info"><i class="fa-solid fa-circle-info"></i> Info</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ rule.channel_code }}</td>
-                        <td>
-                            {% if rule.is_enabled %}
-                            <span class="badge ok"><i class="fa-solid fa-circle-check"></i> Activa</span>
-                            {% else %}
-                            <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> Inactiva</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <form method="post" action="/alertas/rule/toggle" class="inline-form">
-                                <input type="hidden" name="rule_id" value="{{ rule.id }}">
-                                <button type="submit" class="btn small {% if rule.is_enabled %}ghost{% else %}primary{% endif %}">
-                                    {% if rule.is_enabled %}Desactivar{% else %}Activar{% endif %}
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">No hay reglas configuradas todavía.</div>
-            {% endif %}
-        </section>
-
-        <section class="card card-mini" style="margin-top: 20px;">
-            <div class="card-head">
-                <div class="card-icon">
-                    <i class="fa-solid fa-clock-rotate-left"></i>
-                </div>
-                <div class="card-title">
-                    <h3>Historial de entregas</h3>
-                    <p>Últimas alertas enviadas o fallidas</p>
-                </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Evento</th>
+                            <th>Título</th>
+                            <th>Canal</th>
+                            <th>Destino</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in deliveries %}
+                        <tr>
+                            <td>{{ d.delivered_at }}</td>
+                            <td>{{ d.event_code }}</td>
+                            <td>{{ d.title }}</td>
+                            <td>{{ d.channel_code }}</td>
+                            <td>{{ d.destination or '-' }}</td>
+                            <td>
+                                {% if d.status == 'OK' %}
+                                <span class="badge ok"><i class="fa-solid fa-circle-check"></i> OK</span>
+                                {% else %}
+                                <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> ERROR</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% if not deliveries %}
+                        <tr>
+                            <td colspan="6" class="empty-state">Aún no hay entregas registradas.</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
             </div>
-
-            {% if deliveries %}
-            <table class="delivery-list">
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Evento</th>
-                        <th>Título</th>
-                        <th>Canal</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for delivery in deliveries %}
-                    <tr>
-                        <td>{{ delivery.delivered_at }}</td>
-                        <td>{{ delivery.event_code }}</td>
-                        <td>{{ delivery.title }}</td>
-                        <td>{{ delivery.channel_code }}</td>
-                        <td>
-                            {% if delivery.status == 'OK' %}
-                            <span class="badge ok"><i class="fa-solid fa-circle-check"></i> OK</span>
-                            {% else %}
-                            <span class="badge error"><i class="fa-solid fa-circle-xmark"></i> ERROR</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">Todavía no hay entregas registradas.</div>
-            {% endif %}
         </section>
     </main>
 </div>
 
-<script>
-    (function () {
-        const button = document.getElementById('btn-telegram-test');
-        const resultBox = document.getElementById('telegram-test-result');
-
-        if (!button || !resultBox) return;
-
-        button.addEventListener('click', async function () {
-            button.disabled = true;
-            button.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Enviando prueba...';
-
-            try {
-                const response = await fetch('/alertas/test', {
-                    method: 'POST',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-
-                const data = await response.json();
-                resultBox.classList.add('show');
-
-                if (data.ok) {
-                    resultBox.className = 'test-result alert-box success show';
-                    resultBox.innerHTML = '<i class="fa-solid fa-circle-check"></i> Prueba enviada correctamente a Telegram.';
-                } else {
-                    resultBox.className = 'test-result alert-box error show';
-                    resultBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> No se pudo enviar la prueba: ' + (data.text || data.error || 'Error desconocido');
-                }
-            } catch (error) {
-                resultBox.classList.add('show');
-                resultBox.className = 'test-result alert-box error show';
-                resultBox.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Error llamando al endpoint de prueba.';
-            } finally {
-                button.disabled = false;
-                button.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Enviar prueba Telegram';
-            }
-        });
-    })();
-</script>
-
 </body>
 </html>
+
