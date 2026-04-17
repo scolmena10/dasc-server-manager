@@ -614,7 +614,15 @@ def get_alert_stats() -> dict[str, Any]:
 # SSH + LOGS
 # =====================
 def ssh_run(host: str, script: str, args: list[str]) -> dict[str, Any]:
-    cmd = ["ssh", f"{USUARIO}@{host}", script] + args
+    cmd = [
+    "ssh",
+    "-i", "/opt/dasc/api/.ssh/id_rsa_dasc",
+    "-o", "BatchMode=yes",
+    "-o", "StrictHostKeyChecking=yes",
+    "-o", "UserKnownHostsFile=/opt/dasc/api/.ssh/known_hosts_dasc",
+    f"{USUARIO}@{host}",
+    script,
+    ] + args
     res = subprocess.run(cmd, capture_output=True, text=True)
 
     out = (res.stdout or "").strip()
