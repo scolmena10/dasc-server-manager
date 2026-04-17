@@ -90,9 +90,6 @@ systemctl daemon-reload
 echo "==> Activando servicio al arranque"
 systemctl enable "$SERVICE_NAME"
 
-echo "==> Reiniciando servicio"
-systemctl restart "$SERVICE_NAME"
-
 echo "==> Preparando SSH aislado de DASC"
 touch "$DASC_KNOWN_HOSTS"
 chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
@@ -159,6 +156,9 @@ sudo -u "$APP_USER" ssh \
     echo "ERROR: la verificación SSH sin contraseña ha fallado."
     exit 1
   }
+
+echo "==> Reiniciando servicio"
+systemctl restart "$SERVICE_NAME"
 
 echo "==> Comprobando estado"
 systemctl --no-pager --full status "$SERVICE_NAME" || true
