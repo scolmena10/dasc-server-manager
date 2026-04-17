@@ -2,7 +2,10 @@
 set -euo pipefail
 
 SERVICE_NAME="dasc-api"
+PADRE_DIR="/opt/dasc"
 INSTALL_DIR="/opt/dasc/api"
+DATA_DIR="${INSTALL_DIR}/data"
+ALERTS_DB="${DATA_DIR}/alerts.db"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
 if [[ "$EUID" -ne 0 ]]; then
@@ -13,6 +16,8 @@ fi
 echo "Vas a desinstalar el panel DASC de esta máquina."
 echo "Se eliminarán:"
 echo "  - $INSTALL_DIR"
+echo "  - $DATA_DIR"
+echo "  - $ALERTS_DB"
 echo "  - $SERVICE_FILE"
 echo
 read -r -p "Escribe SI para continuar: " CONFIRM
@@ -35,8 +40,15 @@ echo "==> Recargando systemd"
 systemctl daemon-reload
 systemctl reset-failed || true
 
+echo "==> Eliminando base de datos de alertas y datos locales"
+rm -f "$ALERTS_DB" 2>/dev/null || true
+rm -rf "$DATA_DIR" 2>/dev/null || true
+
 echo "==> Eliminando directorio de instalación"
 rm -rf "$INSTALL_DIR"
+
+echo "==> Eliminando directorio padre si queda vacío"
+rmdir "$PADRE_DIR" 2>/dev/null || true
 
 echo
 echo "============================================"
