@@ -87,6 +87,7 @@ echo "==> Sincronizando archivos del panel"
 rsync -av --delete \
   --exclude='config.env' \
   --exclude='data/users.json' \
+  --exclude='.ssh' \
   "$PACKAGE_DIR/" "$INSTALL_DIR/"
 
 echo "==> Ajustando permisos de la instalación"
