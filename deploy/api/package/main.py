@@ -54,6 +54,7 @@ SCRIPT_BACKUPS = os.getenv("SCRIPT_BACKUPS", "/usr/local/bin/backups_api.sh")
 # ALERTAS TELEGRAM
 # =====================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip()
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 ALERTS_DB_PATH = os.getenv("ALERTS_DB_PATH", "data/alerts.db")
 ALERTS_DEFAULT_CHANNEL = os.getenv("ALERTS_DEFAULT_CHANNEL", "telegram")
@@ -218,6 +219,7 @@ def get_db() -> sqlite3.Connection:
     return conn
 
 
+
 def init_alerts_db() -> None:
     conn = get_db()
     cur = conn.cursor()
@@ -268,6 +270,9 @@ def init_alerts_db() -> None:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             event_id INTEGER NOT NULL,
             channel_code TEXT NOT NULL,
+            recipient_id INTEGER,
+            recipient_name TEXT,
+            destination TEXT,
             status TEXT NOT NULL,
             response_text TEXT,
             delivered_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -278,10 +283,27 @@ def init_alerts_db() -> None:
 
     cur.execute(
         """
+        CREATE TABLE IF NOT EXISTS alert_recipients (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_code TEXT NOT NULL,
+            company TEXT,
+            name TEXT NOT NULL,
+            username TEXT,
+            kind TEXT NOT NULL DEFAULT 'user',
+            destination TEXT NOT NULL,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+
+    cur.execute(
+        """
         INSERT OR IGNORE INTO alert_channels(code, name, is_enabled, token, destination)
         VALUES (?, ?, ?, ?, ?)
         """,
-        ("telegram", "Telegram", 1, "", TELEGRAM_CHAT_ID),
+        ("telegram", "Telegram", 1, "", ""),
     )
 
     default_rules = [
@@ -304,31 +326,164 @@ def init_alerts_db() -> None:
             (event_code, severity, channel_code, is_enabled, event_code, channel_code),
         )
 
+    conn.commit()
+    conn.close()
+    sync_channel_destination()
+
+
+def sync_channel_destination() -> None:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT destination
+        FROM alert_recipients
+        WHERE channel_code = 'telegram' AND is_default = 1
+        LIMIT 1
+        """
+    )
+    row = cur.fetchone()
+    destination = row["destination"] if row else ""
     cur.execute(
         """
         UPDATE alert_channels
-        SET destination = COALESCE(NULLIF(?, ''), destination)
+        SET token = ?, destination = ?
         WHERE code = 'telegram'
         """,
-        (TELEGRAM_CHAT_ID,),
+        (TELEGRAM_BOT_TOKEN, destination),
     )
-
     conn.commit()
     conn.close()
+
+
+def get_default_recipient(channel_code: str = "telegram") -> dict[str, Any] | None:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT *
+        FROM alert_recipients
+        WHERE channel_code = ? AND is_default = 1
+        LIMIT 1
+        """,
+        (channel_code,),
+    )
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_enabled_recipients(channel_code: str = "telegram") -> list[dict[str, Any]]:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT *
+        FROM alert_recipients
+        WHERE channel_code = ? AND is_enabled = 1
+        ORDER BY is_default DESC, id ASC
+        """,
+        (channel_code,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def ensure_default_recipient() -> None:
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        SELECT id FROM alert_recipients
+        WHERE channel_code = 'telegram' AND is_default = 1
+        LIMIT 1
+        """
+    )
+    has_default = cur.fetchone()
+    if not has_default:
+        cur.execute(
+            """
+            SELECT id
+            FROM alert_recipients
+            WHERE channel_code = 'telegram' AND is_enabled = 1
+            ORDER BY id ASC
+            LIMIT 1
+            """
+        )
+        first_enabled = cur.fetchone()
+        if first_enabled:
+            cur.execute(
+                "UPDATE alert_recipients SET is_default = 1 WHERE id = ?",
+                (first_enabled["id"],),
+            )
+    conn.commit()
+    conn.close()
+    sync_channel_destination()
+
+
+def fetch_recent_telegram_chats() -> list[dict[str, Any]]:
+    token = TELEGRAM_BOT_TOKEN
+    if not token:
+        return []
+
+    url = f"https://api.telegram.org/bot{token}/getUpdates"
+    req = UrlRequest(url, method="GET")
+
+    with urlopen(req, timeout=20) as response:
+        raw = response.read().decode("utf-8", errors="replace")
+        data = json.loads(raw)
+
+    if not data.get("ok"):
+        return []
+
+    unique: dict[str, dict[str, Any]] = {}
+    updates = data.get("result", [])
+    for item in reversed(updates):
+        message = item.get("message") or item.get("edited_message") or item.get("channel_post") or {}
+        chat = message.get("chat") or {}
+        chat_id = str(chat.get("id", "")).strip()
+        if not chat_id or chat_id in unique:
+            continue
+
+        chat_type = chat.get("type", "unknown")
+        username = ""
+        if chat_type == "private":
+            if chat.get("username"):
+                username = f"@{chat.get('username')}"
+            else:
+                full_name = " ".join([str(chat.get("first_name") or "").strip(), str(chat.get("last_name") or "").strip()]).strip()
+                username = full_name or "(sin username)"
+        else:
+            username = str(chat.get("title") or chat.get("username") or "(grupo sin nombre)").strip()
+
+        unique[chat_id] = {
+            "chat_id": chat_id,
+            "username": username,
+            "kind": "group" if chat_type in ("group", "supergroup") else "user",
+            "chat_type": chat_type,
+        }
+
+    return list(unique.values())
 
 
 @app.on_event("startup")
 def startup_event() -> None:
     ensure_users_file()
     init_alerts_db()
+    ensure_default_recipient()
+
 
 
 def send_telegram_message(text: str, chat_id: str | None = None) -> dict[str, Any]:
     token = TELEGRAM_BOT_TOKEN
-    target_chat = (chat_id or TELEGRAM_CHAT_ID).strip()
+    target_chat = (chat_id or "").strip()
 
-    if not token or not target_chat:
-        return {"ok": False, "status": "ERROR", "text": "Falta TELEGRAM_BOT_TOKEN o TELEGRAM_CHAT_ID en config.env"}
+    if not token:
+        return {"ok": False, "status": "ERROR", "text": "Falta TELEGRAM_BOT_TOKEN en config.env"}
+
+    if not target_chat:
+        return {"ok": False, "status": "ERROR", "text": "No hay destinatario configurado. Añade un chat o grupo en Alertas."}
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = json.dumps(
@@ -365,6 +520,7 @@ def send_telegram_message(text: str, chat_id: str | None = None) -> dict[str, An
         return {"ok": False, "status": "ERROR", "text": str(e)}
 
 
+
 def emit_alert(event_code: str, severity: str, title: str, message: str, source: str) -> int:
     conn = get_db()
     cur = conn.cursor()
@@ -392,15 +548,35 @@ def emit_alert(event_code: str, severity: str, title: str, message: str, source:
 
     for channel_code in channels:
         if channel_code == "telegram":
-            result = send_telegram_message(message)
-            status = "OK" if result["ok"] else "ERROR"
-            cur.execute(
-                """
-                INSERT INTO alert_deliveries(event_id, channel_code, status, response_text)
-                VALUES (?, ?, ?, ?)
-                """,
-                (event_id, channel_code, status, result["text"]),
-            )
+            recipients = get_enabled_recipients("telegram")
+            if not recipients:
+                cur.execute(
+                    """
+                    INSERT INTO alert_deliveries(event_id, channel_code, recipient_id, recipient_name, destination, status, response_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (event_id, channel_code, None, None, None, "ERROR", "No hay destinatarios Telegram activos"),
+                )
+                continue
+
+            for recipient in recipients:
+                result = send_telegram_message(message, recipient["destination"])
+                status = "OK" if result["ok"] else "ERROR"
+                cur.execute(
+                    """
+                    INSERT INTO alert_deliveries(event_id, channel_code, recipient_id, recipient_name, destination, status, response_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        event_id,
+                        channel_code,
+                        recipient["id"],
+                        recipient["name"],
+                        recipient["destination"],
+                        status,
+                        result["text"],
+                    ),
+                )
 
     conn.commit()
     conn.close()
@@ -786,6 +962,7 @@ def ver_logs(request: Request):
     return templates.TemplateResponse(request, "logs.html", context)
 
 
+
 # =====================
 # ALERTAS
 # =====================
@@ -793,6 +970,8 @@ def ver_logs(request: Request):
 def alertas(request: Request):
     if not has_permission(request, "alertas"):
         return permission_redirect()
+
+    ensure_default_recipient()
 
     conn = get_db()
     cur = conn.cursor()
@@ -803,9 +982,12 @@ def alertas(request: Request):
     cur.execute("SELECT * FROM alert_rules ORDER BY event_code")
     rules = [dict(row) for row in cur.fetchall()]
 
+    cur.execute("SELECT * FROM alert_recipients ORDER BY is_default DESC, id ASC")
+    recipients = [dict(row) for row in cur.fetchall()]
+
     cur.execute(
         """
-        SELECT d.delivered_at, e.event_code, e.title, d.channel_code, d.status
+        SELECT d.delivered_at, e.event_code, e.title, d.channel_code, d.recipient_name, d.destination, d.status
         FROM alert_deliveries d
         JOIN alert_events e ON e.id = d.event_id
         ORDER BY d.id DESC
@@ -815,12 +997,21 @@ def alertas(request: Request):
     deliveries = [dict(row) for row in cur.fetchall()]
     conn.close()
 
+    detected_chats = request.session.get("telegram_detected_chats", [])
+
+    tg = next((c for c in channels if c.get("code") == "telegram"), None)
+
     context = get_common_context(request)
     context["channels"] = channels
+    context["tg"] = tg
     context["rules"] = rules
+    context["recipients"] = recipients
+    context["detected_chats"] = detected_chats
     context["deliveries"] = deliveries
     context["ok"] = request.query_params.get("ok")
     context["msg"] = request.query_params.get("msg")
+    context["manual_url"] = "/static/docs/guia_alertas_telegram.pdf"
+    context["bot_link"] = f"https://t.me/{TELEGRAM_BOT_USERNAME}" if TELEGRAM_BOT_USERNAME else None
     context.update(get_alert_stats())
 
     return templates.TemplateResponse(request, "alertas.html", context)
@@ -834,23 +1025,210 @@ def alertas_test(request: Request):
             status_code=303,
         )
 
+    default_recipient = get_default_recipient("telegram")
+    if not default_recipient:
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=No+hay+destino+por+defecto.+Añade+un+destinatario+primero",
+            status_code=303,
+        )
+
     text = (
         "<b>DASC</b>\n"
         "Prueba de alerta Telegram desde el panel.\n"
         f"Usuario: {request.session.get('user', 'anon')}\n"
-        f"Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        f"Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"Destino: {default_recipient['name']}"
     )
 
-    result = send_telegram_message(text)
-
+    result = send_telegram_message(text, default_recipient["destination"])
     if result.get("ok"):
         msg = "Prueba+de+Telegram+enviada+correctamente"
     else:
-        error_text = str(result.get("text") or result.get("error") or "Error+desconocido")
-        msg = quote(error_text)
+        msg = quote(str(result.get("text") or result.get("error") or "Error desconocido"))
 
     return RedirectResponse(
         url=f"/alertas?ok={1 if result.get('ok') else 0}&msg={msg}",
+        status_code=303,
+    )
+
+
+@app.post("/alertas/detect")
+def alertas_detect(request: Request):
+    if not has_permission(request, "alertas"):
+        return permission_redirect()
+
+    try:
+        detected = fetch_recent_telegram_chats()
+        request.session["telegram_detected_chats"] = detected
+        if detected:
+            return RedirectResponse(
+                url=f"/alertas?ok=1&msg={quote(f'Se detectaron {len(detected)} chats recientes')}",
+                status_code=303,
+            )
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=No+se+detectaron+chats.+Haz+/start+y+vuelve+a+probar",
+            status_code=303,
+        )
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/alertas?ok=0&msg={quote(str(e))}",
+            status_code=303,
+        )
+
+
+@app.post("/alertas/recipient/add")
+def alertas_recipient_add(
+    request: Request,
+    company: str = Form(""),
+    name: str = Form(...),
+    kind: str = Form(...),
+    destination: str = Form(...),
+    username: str = Form(""),
+):
+    if not has_permission(request, "alertas"):
+        return permission_redirect()
+
+    kind = (kind or "user").strip()
+    if kind not in {"user", "group"}:
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=Tipo+de+destinatario+no+válido",
+            status_code=303,
+        )
+
+    destination = (destination or "").strip()
+    name = (name or "").strip()
+    username = (username or "").strip()
+    company = (company or "").strip()
+
+    if not destination or not name:
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=Nombre+y+chat_id+son+obligatorios",
+            status_code=303,
+        )
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COUNT(*) AS total FROM alert_recipients WHERE destination = ? AND channel_code = 'telegram'",
+        (destination,),
+    )
+    exists = int(cur.fetchone()["total"])
+    if exists:
+        conn.close()
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=Ese+chat_id+ya+está+guardado",
+            status_code=303,
+        )
+
+    cur.execute("SELECT COUNT(*) AS total FROM alert_recipients WHERE channel_code = 'telegram'",)
+    total_before = int(cur.fetchone()["total"])
+    is_default = 1 if total_before == 0 else 0
+
+    cur.execute(
+        """
+        INSERT INTO alert_recipients(channel_code, company, name, username, kind, destination, is_enabled, is_default)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("telegram", company, name, username, kind, destination, 1, is_default),
+    )
+    conn.commit()
+    conn.close()
+    ensure_default_recipient()
+
+    return RedirectResponse(
+        url="/alertas?ok=1&msg=Destinatario+guardado+correctamente",
+        status_code=303,
+    )
+
+
+@app.post("/alertas/recipient/add-detected")
+def alertas_recipient_add_detected(
+    request: Request,
+    username: str = Form(""),
+    chat_id: str = Form(...),
+    kind: str = Form("user"),
+):
+    display_name = (username or "").strip() or "(sin username)"
+    company = "Detectado Telegram"
+    return alertas_recipient_add(
+        request=request,
+        company=company,
+        name=display_name,
+        kind=kind,
+        destination=chat_id,
+        username=username,
+    )
+
+
+@app.post("/alertas/recipient/toggle")
+def alertas_recipient_toggle(request: Request, recipient_id: int = Form(...)):
+    if not has_permission(request, "alertas"):
+        return permission_redirect()
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    cur.execute(
+        """
+        UPDATE alert_recipients
+        SET is_enabled = CASE WHEN is_enabled = 1 THEN 0 ELSE 1 END
+        WHERE id = ?
+        """,
+        (recipient_id,),
+    )
+
+    cur.execute("SELECT is_enabled, is_default FROM alert_recipients WHERE id = ?", (recipient_id,))
+    row = cur.fetchone()
+    conn.commit()
+    conn.close()
+
+    if row and int(row["is_enabled"]) == 0 and int(row["is_default"]) == 1:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE alert_recipients SET is_default = 0 WHERE id = ?", (recipient_id,))
+        conn.commit()
+        conn.close()
+
+    ensure_default_recipient()
+    return RedirectResponse(
+        url="/alertas?ok=1&msg=Destinatario+actualizado",
+        status_code=303,
+    )
+
+
+@app.post("/alertas/recipient/delete")
+def alertas_recipient_delete(request: Request, recipient_id: int = Form(...)):
+    if not has_permission(request, "alertas"):
+        return permission_redirect()
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM alert_recipients WHERE id = ?", (recipient_id,))
+    conn.commit()
+    conn.close()
+
+    ensure_default_recipient()
+    return RedirectResponse(
+        url="/alertas?ok=1&msg=Destinatario+eliminado",
+        status_code=303,
+    )
+
+
+@app.post("/alertas/recipient/default")
+def alertas_recipient_default(request: Request, recipient_id: int = Form(...)):
+    if not has_permission(request, "alertas"):
+        return permission_redirect()
+
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("UPDATE alert_recipients SET is_default = 0 WHERE channel_code = 'telegram'")
+    cur.execute("UPDATE alert_recipients SET is_default = 1, is_enabled = 1 WHERE id = ?", (recipient_id,))
+    conn.commit()
+    conn.close()
+
+    sync_channel_destination()
+    return RedirectResponse(
+        url="/alertas?ok=1&msg=Destino+por+defecto+actualizado",
         status_code=303,
     )
 
