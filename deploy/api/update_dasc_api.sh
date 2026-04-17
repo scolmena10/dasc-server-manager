@@ -88,6 +88,7 @@ rsync -av --delete \
   --exclude='config.env' \
   --exclude='data/users.json' \
   --exclude='.ssh' \
+  --exclude='data/alerts.db' \
   "$PACKAGE_DIR/" "$INSTALL_DIR/"
 
 echo "==> Ajustando permisos de la instalación"
