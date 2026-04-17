@@ -829,7 +829,10 @@ def alertas(request: Request):
 @app.post("/alertas/test")
 def alertas_test(request: Request):
     if not has_permission(request, "alertas"):
-        return JSONResponse({"ok": False, "error": "No tienes permisos"}, status_code=403)
+        return RedirectResponse(
+            url="/alertas?ok=0&msg=No+tienes+permisos",
+            status_code=303,
+        )
 
     text = (
         "<b>DASC</b>\n"
@@ -837,8 +840,19 @@ def alertas_test(request: Request):
         f"Usuario: {request.session.get('user', 'anon')}\n"
         f"Hora: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
     )
+
     result = send_telegram_message(text)
-    return JSONResponse(result)
+
+    if result.get("ok"):
+        msg = "Prueba+de+Telegram+enviada+correctamente"
+    else:
+        error_text = str(result.get("text") or result.get("error") or "Error+desconocido")
+        msg = quote(error_text)
+
+    return RedirectResponse(
+        url=f"/alertas?ok={1 if result.get('ok') else 0}&msg={msg}",
+        status_code=303,
+    )
 
 
 @app.post("/alertas/rule/toggle")
