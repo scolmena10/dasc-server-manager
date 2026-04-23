@@ -10,6 +10,10 @@ INSTALL_DIR="/opt/dasc/api"
 VENV_DIR="$INSTALL_DIR/venv"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
+DASC_SSH_DIR="${INSTALL_DIR}/.ssh"
+DASC_KEY="${DASC_SSH_DIR}/id_rsa_dasc"
+DASC_KNOWN_HOSTS="${DASC_SSH_DIR}/known_hosts_dasc"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_DIR="$SCRIPT_DIR/package"
 
@@ -39,15 +43,15 @@ apt update
 apt install -y python3 python3-venv python3-pip openssh-client curl sshpass
 
 echo "==> Creando estructura destino"
-mkdir -p "$PADRE_DIR"
-mkdir -p "$INSTALL_DIR"
+mkdir -p "$PADRE_DIR" "$INSTALL_DIR" "$DASC_SSH_DIR"
 
 echo "==> Copiando archivos del proyecto"
 cp -r "$PACKAGE_DIR"/. "$INSTALL_DIR"
 
 echo "==> Ajustando permisos iniciales"
-chown -R "$APP_USER:$APP_GROUP" /opt/dasc
+chown -R "$APP_USER:$APP_GROUP" "$PADRE_DIR"
 chmod 640 "$INSTALL_DIR/config.env"
+chmod 700 "$DASC_SSH_DIR"
 
 echo
 if [[ -z "${ADMIN_PASSWORD:-}" ]]; then
@@ -76,8 +80,83 @@ echo "==> Creando entorno virtual"
 sudo -u "$APP_USER" python3 -m venv "$VENV_DIR"
 
 echo "==> Instalando dependencias Python"
-sudo -u "$APP_USER" "$VENV_DIR/bin/pip" install --upgrade pip
-sudo -u "$APP_USER" "$VENV_DIR/bin/pip" install -r "$INSTALL_DIR/requirements.txt"
+sudo -u "$APP_USER" "$VENV_DIR/bin/python" -m pip install --upgrade pip setuptools wheel
+sudo -u "$APP_USER" "$VENV_DIR/bin/python" -m pip install -r "$INSTALL_DIR/requirements.txt"
+
+if [[ ! -x "$VENV_DIR/bin/uvicorn" ]]; then
+  echo "ERROR: no existe $VENV_DIR/bin/uvicorn después de instalar dependencias"
+  exit 1
+fi
+
+echo "==> Preparando SSH aislado de DASC"
+touch "$DASC_KNOWN_HOSTS"
+chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
+chmod 644 "$DASC_KNOWN_HOSTS"
+
+if [[ ! -f "$DASC_KEY" ]]; then
+  echo "==> Generando clave SSH propia de DASC"
+  sudo -u "$APP_USER" ssh-keygen -t rsa -b 4096 -N "" -f "$DASC_KEY"
+else
+  echo "==> La clave SSH propia de DASC ya existe, se reutiliza"
+fi
+
+chown "$APP_USER:$APP_GROUP" "$DASC_KEY" "${DASC_KEY}.pub"
+chmod 600 "$DASC_KEY"
+chmod 644 "${DASC_KEY}.pub"
+
+cp "${DASC_KEY}.pub" "${INSTALL_DIR}/api_panel.pub"
+chown "$APP_USER:$APP_GROUP" "${INSTALL_DIR}/api_panel.pub"
+chmod 644 "${INSTALL_DIR}/api_panel.pub"
+echo "==> Clave pública exportada a ${INSTALL_DIR}/api_panel.pub"
+
+BACKUP_HOST="$(awk -F= '/^BACKUPS_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
+if [[ -z "$BACKUP_HOST" ]]; then
+  echo "ERROR: no se ha podido obtener BACKUPS_HOST desde config.env"
+  exit 1
+fi
+
+echo "==> Limpiando huellas SSH antiguas para ${BACKUP_HOST}"
+sudo -u "$APP_USER" ssh-keygen -R "$BACKUP_HOST" -f "$DASC_KNOWN_HOSTS" >/dev/null 2>&1 || true
+
+echo "==> Registrando host key actual de ${BACKUP_HOST}"
+if ! sudo -u "$APP_USER" ssh-keyscan -H "$BACKUP_HOST" > "$DASC_KNOWN_HOSTS" 2>/dev/null; then
+  echo "ERROR: no se pudo obtener la host key con ssh-keyscan para ${BACKUP_HOST}"
+  exit 1
+fi
+chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
+chmod 644 "$DASC_KNOWN_HOSTS"
+
+echo "==> Configurando acceso SSH automático al servidor de backups (${BACKUP_HOST})"
+if [[ -z "${DASC_PASS:-}" ]]; then
+  echo
+  read -rsp "Introduce la contraseña actual del usuario dasc en ${BACKUP_HOST}: " DASC_PASS
+  echo
+fi
+
+if [[ -z "$DASC_PASS" ]]; then
+  echo "ERROR: la contraseña de dasc no puede estar vacía."
+  exit 1
+fi
+
+sudo -u "$APP_USER" sshpass -p "$DASC_PASS" ssh-copy-id \
+  -i "${DASC_KEY}.pub" \
+  -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+  -o StrictHostKeyChecking=no \
+  "dasc@${BACKUP_HOST}" || {
+    echo "ERROR: no se pudo copiar la clave automáticamente a dasc@${BACKUP_HOST}."
+    exit 1
+  }
+
+echo "==> Verificando acceso SSH sin contraseña con el SSH aislado de DASC"
+sudo -u "$APP_USER" ssh \
+  -i "$DASC_KEY" \
+  -o BatchMode=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+  "dasc@${BACKUP_HOST}" "hostname >/dev/null" || {
+    echo "ERROR: la verificación SSH sin contraseña ha fallado."
+    exit 1
+  }
 
 echo "==> Creando servicio systemd"
 cat > "$SERVICE_FILE" <<EOF2
@@ -109,55 +188,12 @@ systemctl enable "$SERVICE_NAME"
 echo "==> Reiniciando servicio"
 systemctl restart "$SERVICE_NAME"
 
-echo "==> Preparando clave SSH para la API"
-APP_HOME="$(eval echo "~${APP_USER}")"
-sudo -u "$APP_USER" mkdir -p "${APP_HOME}/.ssh"
-sudo -u "$APP_USER" chmod 700 "${APP_HOME}/.ssh"
-
-if [[ ! -f "${APP_HOME}/.ssh/id_rsa" ]]; then
-  sudo -u "$APP_USER" ssh-keygen -t rsa -b 4096 -N "" -f "${APP_HOME}/.ssh/id_rsa"
-  echo "==> Clave SSH generada"
-else
-  echo "==> La clave SSH ya existe, se reutiliza"
-fi
-
-cp "${APP_HOME}/.ssh/id_rsa.pub" "${INSTALL_DIR}/api_panel.pub"
-chown "$APP_USER:$APP_GROUP" "${INSTALL_DIR}/api_panel.pub"
-chmod 644 "${INSTALL_DIR}/api_panel.pub"
-echo "==> Clave pública exportada a ${INSTALL_DIR}/api_panel.pub"
-
-BACKUP_HOST="$(awk -F= '/^BACKUPS_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
-if [[ -z "$BACKUP_HOST" ]]; then
-  echo "ERROR: no se ha podido obtener BACKUPS_HOST desde config.env"
-  exit 1
-fi
-
-echo "==> Configurando acceso SSH automático al servidor de backups (${BACKUP_HOST})"
-if [[ -z "${DASC_PASS:-}" ]]; then
-  echo
-  read -rsp "Introduce la contraseña actual del usuario dasc en ${BACKUP_HOST}: " DASC_PASS
-  echo
-fi
-
-if [[ -z "$DASC_PASS" ]]; then
-  echo "ERROR: la contraseña de dasc no puede estar vacía."
-  exit 1
-fi
-
-sudo -u "$APP_USER" sshpass -p "$DASC_PASS" ssh-copy-id -o StrictHostKeyChecking=no "dasc@${BACKUP_HOST}" || {
-  echo "ERROR: no se pudo copiar la clave automáticamente a dasc@${BACKUP_HOST}."
-  exit 1
-}
-
-echo "==> Verificando acceso SSH sin contraseña"
-sudo -u "$APP_USER" ssh -o BatchMode=yes -o StrictHostKeyChecking=no "dasc@${BACKUP_HOST}" "hostname >/dev/null" || {
-  echo "ERROR: la verificación SSH sin contraseña ha fallado."
-  exit 1
-}
-
 echo "==> Reajustando permisos finales"
-chown -R "$APP_USER:$APP_GROUP" /opt/dasc
+chown -R "$APP_USER:$APP_GROUP" "$PADRE_DIR"
 chmod 640 "$INSTALL_DIR/config.env"
+chmod 700 "$DASC_SSH_DIR"
+chmod 600 "$DASC_KEY"
+chmod 644 "${DASC_KEY}.pub" "$DASC_KNOWN_HOSTS"
 
 echo "==> Comprobando estado"
 systemctl --no-pager --full status "$SERVICE_NAME" || true
@@ -170,6 +206,9 @@ echo "Instalación completada"
 echo "Panel instalado en: $INSTALL_DIR"
 echo "Servicio: $SERVICE_NAME"
 echo "Usuario admin del panel: admin"
+echo "SSH aislado de DASC: ${DASC_SSH_DIR}"
+echo "Clave usada: ${DASC_KEY}"
+echo "Known hosts usado: ${DASC_KNOWN_HOSTS}"
 echo "SSH automático configurado contra: $BACKUP_HOST"
 echo "URL local: http://127.0.0.1:8000"
 echo "URL red:   http://<IP_DEL_SERVIDOR>:8000"
