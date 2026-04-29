@@ -40,7 +40,7 @@
     <div class="history">
       <h3>Estado del módulo</h3>
       <p><span class="dot ok"></span> Formularios conectados con <code>/backups/run</code></p>
-      <p><span class="dot warn"></span> Incremental y diferencial siguen en modo MVP</p>
+      <p><span class="dot ok"></span> Incremental y diferencial activos con binlogs</p>
       <p><span class="dot ok"></span> Acceso según permisos del usuario</p>
     </div>
   </aside>
@@ -104,9 +104,7 @@
           <div class="help-box">
             <h4><i class="fa-solid fa-wand-magic-sparkles"></i> Incremental</h4>
             <p>
-              Guarda únicamente los cambios realizados desde la última copia de referencia. Está
-              pensada para reducir espacio y acelerar procesos, y queda preparada en la interfaz para
-              la evolución completa del sistema.
+              Guarda los cambios realizados desde el último backup registrado usando binary logs. Reduce espacio y permite mantener una cadena de copias incremental.
             </p>
           </div>
     
@@ -166,13 +164,59 @@
       <div class="card-head">
         <div class="card-icon"><i class="fa-solid fa-clipboard-list"></i></div>
         <div class="card-title">
-          <h3>Historial en el MVP</h3>
+          <h3>Historial de copias</h3>
+          <p>Últimas copias completas, incrementales y diferenciales registradas</p>
         </div>
       </div>
-      <div class="empty-state">
-        <p><strong>Historial dinámico pendiente.</strong></p>
+
+      <div class="bkp-table-wrap">
+        <table class="bkp-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Fecha</th>
+              <th>Tipo</th>
+              <th>Base de datos</th>
+              <th>Archivo</th>
+              <th>Base</th>
+              <th>Rango binlog</th>
+              <th>Notas</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for b in backup_history %}
+            <tr>
+              <td>{{ b.id }}</td>
+              <td>{{ b.created_at }}</td>
+              <td>
+                {% if b.type == "full" %}
+                  <span class="tag tag-full">Completo</span>
+                {% elif b.type == "incremental" %}
+                  <span class="tag tag-inc">Incremental</span>
+                {% elif b.type == "differential" %}
+                  <span class="tag tag-diff">Diferencial</span>
+                {% else %}
+                  {{ b.tipo_label }}
+                {% endif %}
+              </td>
+              <td>{{ b.db }}</td>
+              <td>{{ b.filename }}</td>
+              <td>{{ b.base_id or "-" }}</td>
+              <td>{{ b.rango }}</td>
+              <td>{{ b.notes or "-" }}</td>
+            </tr>
+            {% endfor %}
+
+            {% if not backup_history %}
+            <tr>
+              <td colspan="8" style="text-align:center;">No hay copias registradas todavía.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
       </div>
     </section>
+
   </main>
 </div>
 
@@ -191,7 +235,7 @@
       <div class="form-grid">
         <label class="field"><span>Base de datos</span><input name="db" placeholder="Ej: employees" required></label>
         <label class="field"><span>Carpeta destino</span><input name="dest" value="/home/dasc/backups" required></label>
-        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-completo-YYYYMMDD.sql.gz" required></label>
+        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-completo-YYYYMMDD-HHMM.sql" required></label>
         <label class="field"><span>Compresión</span><select name="compress"><option value="gzip" selected>GZIP (.gz)</option><option value="none">Sin compresión</option></select></label>
         <label class="field"><span>Retención</span><select name="retention"><option value="7">7 días</option><option value="14">14 días</option><option value="30" selected>30 días</option><option value="0">No borrar</option></select></label>
         <label class="field field--full"><span>Notas (opcional)</span><input name="notes" placeholder="Ej: antes de actualizar el sistema"></label>
@@ -210,18 +254,18 @@
     <div class="modal__head">
       <div class="modal__title">
         <h3><i class="fa-solid fa-rotate"></i> Backup incremental</h3>
-        <p>Prepara la demo del flujo incremental</p>
+        <p>Ejecuta cambios desde el último backup registrado</p>
       </div>
       <a class="modal__close" href="#" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
     </div>
     <form class="bkp-form" method="POST" action="/backups/run">
       <input type="hidden" name="type" value="incremental">
-      <div class="callout"><i class="fa-solid fa-circle-info"></i><div><strong>MVP:</strong> la interfaz ya lo contempla, pero la lógica remota sigue simplificada.</div></div>
+      <div class="callout"><i class="fa-solid fa-circle-info"></i><div><strong>Incremental real:</strong> se genera a partir de los binary logs desde el último backup registrado.</div></div>
       <div class="form-grid">
         <label class="field"><span>Base de datos</span><input name="db" value="employees" required></label>
         <label class="field"><span>Carpeta destino</span><input name="dest" value="/home/dasc/backups" required></label>
         <label class="field"><span>Base de referencia</span><select name="base_ref"><option value="latest" selected>Último backup disponible</option><option value="manual">Manual</option></select></label>
-        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-inc-YYYYMMDD-HHMM.sql.gz" required></label>
+        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-inc-YYYYMMDD-HHMM.sql" required></label>
         <label class="field"><span>Compresión</span><select name="compress"><option value="gzip" selected>GZIP (.gz)</option><option value="none">Sin compresión</option></select></label>
         <label class="field"><span>Retención</span><select name="retention"><option value="7" selected>7 días</option><option value="14">14 días</option><option value="30">30 días</option><option value="0">No borrar</option></select></label>
       </div>
@@ -239,7 +283,7 @@
     <div class="modal__head">
       <div class="modal__title">
         <h3><i class="fa-solid fa-layer-group"></i> Backup diferencial</h3>
-        <p>Prepara la evolución del producto final</p>
+        <p>Ejecuta cambios desde el último backup completo</p>
       </div>
       <a class="modal__close" href="#" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
     </div>
@@ -249,7 +293,7 @@
         <label class="field"><span>Base de datos</span><input name="db" value="employees" required></label>
         <label class="field"><span>Carpeta destino</span><input name="dest" value="/home/dasc/backups" required></label>
         <label class="field"><span>Referencia</span><select name="base_ref"><option value="last_full" selected>Último backup completo</option><option value="manual">Manual</option></select></label>
-        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-diff-YYYYMMDD-HHMM.sql.gz" required></label>
+        <label class="field"><span>Nombre del archivo</span><input name="name" placeholder="backup-diff-YYYYMMDD-HHMM.sql" required></label>
         <label class="field"><span>Compresión</span><select name="compress"><option value="gzip" selected>GZIP (.gz)</option><option value="none">Sin compresión</option></select></label>
         <label class="field"><span>Retención</span><select name="retention"><option value="7">7 días</option><option value="14" selected>14 días</option><option value="30">30 días</option><option value="0">No borrar</option></select></label>
       </div>
