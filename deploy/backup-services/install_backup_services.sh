@@ -42,7 +42,16 @@ fi
 
 echo "==> Instalando paquetes necesarios"
 apt update
-DEBIAN_FRONTEND=noninteractive apt install -y openssh-server mariadb-client sudo
+
+# En Ubuntu 22.04/Isard, mysqlbinlog suele venir en mysql-server-core-8.0.
+# Usamos cliente MySQL para asegurar mysql, mysqldump y mysqlbinlog.
+DEBIAN_FRONTEND=noninteractive apt install -y \
+  openssh-server \
+  sudo \
+  default-mysql-client \
+  mysql-client-8.0 \
+  mysql-client-core-8.0 \
+  mysql-server-core-8.0
 
 echo "==> Habilitando SSH"
 systemctl enable --now ssh
@@ -98,12 +107,20 @@ chmod 755 "${BACKUP_DIR}"
 chmod 755 "${APP_HOME}"
 
 echo "==> Instalando scripts administrativos"
+sed -i 's/\r$//' "$PACKAGE_DIR/backups_api.sh"
+sed -i 's/\r$//' "$PACKAGE_DIR/servicios_api.sh"
+
 cp "$PACKAGE_DIR/backups_api.sh" "$INSTALL_BACKUP_SCRIPT"
 cp "$PACKAGE_DIR/servicios_api.sh" "$INSTALL_SERVICES_SCRIPT"
+
 chown root:root "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
 chmod 755 "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
 
-echo "==> Creando /home/${APP_USER}/.my.cnf"
+echo "==> Validando sintaxis de scripts"
+bash -n "$INSTALL_BACKUP_SCRIPT"
+bash -n "$INSTALL_SERVICES_SCRIPT"
+
+echo "==> Creando ${APP_HOME}/.my.cnf"
 cat > "${APP_HOME}/.my.cnf" <<EOF2
 [client]
 user=${DB_BACKUP_USER}
@@ -131,16 +148,42 @@ else
   echo "==> No se encontró api_panel.pub. La API podrá copiar su clave automáticamente con sshpass."
 fi
 
+echo "==> Validando herramientas de base de datos"
+command -v mysql >/dev/null || { echo "ERROR: falta mysql"; exit 1; }
+command -v mysqldump >/dev/null || { echo "ERROR: falta mysqldump"; exit 1; }
+command -v mysqlbinlog >/dev/null || { echo "ERROR: falta mysqlbinlog"; exit 1; }
+
 echo "==> Validaciones"
 systemctl --no-pager --full status ssh || true
 ls -l "${INSTALL_BACKUP_SCRIPT}"
 ls -l "${INSTALL_SERVICES_SCRIPT}"
 ls -ld "${BACKUP_DIR}"
 sudo -u "${APP_USER}" test -f "${APP_HOME}/.my.cnf" && echo ".my.cnf OK"
-if sudo -u "${APP_USER}" MYSQL_DEFAULTS_FILE="${APP_HOME}/.my.cnf" mysqldump --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp --single-transaction --databases "${DB_NAME}" >/dev/null; then
+
+echo "==> Comprobando acceso a MariaDB remota"
+if sudo -u "${APP_USER}" mysql --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp -h "${DB_HOST}" -e "SHOW DATABASES;" >/dev/null; then
+  echo "Prueba mysql OK"
+else
+  echo "AVISO: la prueba mysql ha fallado. Revisa DB_HOST, usuario o permisos."
+fi
+
+echo "==> Comprobando mysqldump"
+if sudo -u "${APP_USER}" mysqldump --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp --single-transaction --databases "${DB_NAME}" >/dev/null; then
   echo "Prueba mysqldump OK"
 else
   echo "AVISO: la prueba mysqldump ha fallado. Revisa DB_HOST, usuario o permisos."
+fi
+
+echo "==> Comprobando binlogs remotos"
+FIRST_BINLOG="$(sudo -u "${APP_USER}" mysql --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp -h "${DB_HOST}" --batch --skip-column-names -e "SHOW BINARY LOGS;" 2>/dev/null | awk 'NR==1 {print $1}' || true)"
+if [[ -n "$FIRST_BINLOG" ]]; then
+  if sudo -u "${APP_USER}" mysqlbinlog --defaults-extra-file="${APP_HOME}/.my.cnf" --read-from-remote-server --host="${DB_HOST}" --port=3306 "$FIRST_BINLOG" >/dev/null 2>&1; then
+    echo "Prueba mysqlbinlog OK"
+  else
+    echo "AVISO: mysqlbinlog devolvió avisos/error de versión, pero puede funcionar igualmente con MariaDB."
+  fi
+else
+  echo "AVISO: no se han detectado binlogs. Revisa log_bin en la máquina DB."
 fi
 
 echo
