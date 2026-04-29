@@ -638,6 +638,53 @@ def ssh_run(host: str, script: str, args: list[str]) -> dict[str, Any]:
     }
 
 
+def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
+    """Carga el historial generado por backups_api.sh desde el servidor de backups."""
+    result = ssh_run(
+        SERVIDOR_BACKUPS,
+        "/bin/bash",
+        ["-lc", "cat /home/dasc/backups/.dasc/history.tsv 2>/dev/null || true"],
+    )
+
+    raw = result.get("stdout", "") if result.get("ok") else ""
+    if not raw.strip():
+        return []
+
+    lines = [line for line in raw.splitlines() if line.strip()]
+    if len(lines) <= 1:
+        return []
+
+    header = lines[0].split("\t")
+    history: list[dict[str, str]] = []
+
+    for line in lines[1:]:
+        parts = line.split("\t")
+        while len(parts) < len(header):
+            parts.append("")
+
+        item = dict(zip(header, parts))
+        path = item.get("file", "")
+        item["filename"] = path.split("/")[-1] if path else "-"
+
+        backup_type = item.get("type", "")
+        if backup_type == "full":
+            item["tipo_label"] = "Completo"
+        elif backup_type == "incremental":
+            item["tipo_label"] = "Incremental"
+        elif backup_type == "differential":
+            item["tipo_label"] = "Diferencial"
+        else:
+            item["tipo_label"] = backup_type or "-"
+
+        item["rango"] = "-"
+        if item.get("start_file") and item.get("start_pos") and item.get("end_file") and item.get("end_pos"):
+            item["rango"] = f"{item['start_file']}:{item['start_pos']} → {item['end_file']}:{item['end_pos']}"
+
+        history.append(item)
+
+    return list(reversed(history[-limit:]))
+
+
 def log_event(
     tipo: str,
     resultado: str,
@@ -1389,6 +1436,7 @@ def backups(request: Request):
     context["ok"] = ok
     context["msg"] = msg
     context["cacti_url"] = CACTI_URL
+    context["backup_history"] = cargar_historial_backups()
     return templates.TemplateResponse(request, "backups.html", context)
 
 
@@ -1465,7 +1513,12 @@ def is_ok(output: str) -> bool:
     o = output.lower()
     return (
         o.startswith("ok")
-        or "backup creado" in o
+        or "ok: backup" in o
+        or "backup full creado" in o
+        or "backup incremental creado" in o
+        or "backup differential creado" in o
+        or "backup diferencial creado" in o
+        or "creado en" in o
         or "backup completed" in o
         or "success" in o
     )
