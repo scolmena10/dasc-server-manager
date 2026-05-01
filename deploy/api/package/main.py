@@ -637,6 +637,36 @@ def ssh_run(host: str, script: str, args: list[str]) -> dict[str, Any]:
         "text": out if res.returncode == 0 else f"ERROR ({res.returncode}): {err or out}",
     }
 
+def ssh_run_stdin(host: str, script_text: str) -> dict[str, Any]:
+    cmd = [
+        "ssh",
+        "-i", "/opt/dasc/api/.ssh/id_rsa_dasc",
+        "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "UserKnownHostsFile=/opt/dasc/api/.ssh/known_hosts_dasc",
+        f"{USUARIO}@{host}",
+        "bash",
+        "-s",
+    ]
+
+    res = subprocess.run(
+        cmd,
+        input=script_text,
+        capture_output=True,
+        text=True,
+    )
+
+    out = (res.stdout or "").strip()
+    err = (res.stderr or "").strip()
+
+    return {
+        "ok": res.returncode == 0,
+        "code": res.returncode,
+        "host": host,
+        "stdout": out,
+        "stderr": err,
+        "text": out if res.returncode == 0 else f"ERROR ({res.returncode}): {err or out}",
+    }
 
 def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
     """Carga el historial generado por backups_api.sh desde el servidor de backups."""
@@ -692,8 +722,6 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
     return list(reversed(history[-limit:]))
 
 def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
-    # Calcula qué copias se eliminarán si se borra backup_id.
-    # La eliminación es en cascada: copia indicada + dependientes directas e indirectas.
 
     target_id = str(backup_id)
 
@@ -747,8 +775,6 @@ def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> d
 
 
 def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
-    # Elimina del servidor de backups una lista de IDs ya calculada.
-    # Seguridad: IDs numéricos, rutas dentro de /home/dasc/backups y actualización de history.tsv.
 
     clean_ids: list[str] = []
 
@@ -822,11 +848,7 @@ mv "$TMP" "$HIST"
 echo "OK: Backups eliminados correctamente. IDs: $IDS"
 """
 
-    return ssh_run(
-        SERVIDOR_BACKUPS,
-        "/bin/bash",
-        ["-lc", remote_cmd],
-    )
+    return ssh_run_stdin(SERVIDOR_BACKUPS, remote_cmd)
 
 def log_event(
     tipo: str,
