@@ -640,17 +640,20 @@ def ssh_run(host: str, script: str, args: list[str]) -> dict[str, Any]:
 
 def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
     """Carga el historial generado por backups_api.sh desde el servidor de backups."""
+
     result = ssh_run(
         SERVIDOR_BACKUPS,
-        "/bin/bash",
-        ["-lc", "cat /home/dasc/backups/.dasc/history.tsv 2>/dev/null || true"],
+        "cat",
+        ["/home/dasc/backups/.dasc/history.tsv"],
     )
 
     raw = result.get("stdout", "") if result.get("ok") else ""
+
     if not raw.strip():
         return []
 
     lines = [line for line in raw.splitlines() if line.strip()]
+
     if len(lines) <= 1:
         return []
 
@@ -659,14 +662,17 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
 
     for line in lines[1:]:
         parts = line.split("\t")
+
         while len(parts) < len(header):
             parts.append("")
 
         item = dict(zip(header, parts))
+
         path = item.get("file", "")
         item["filename"] = path.split("/")[-1] if path else "-"
 
         backup_type = item.get("type", "")
+
         if backup_type == "full":
             item["tipo_label"] = "Completo"
         elif backup_type == "incremental":
@@ -677,13 +683,13 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
             item["tipo_label"] = backup_type or "-"
 
         item["rango"] = "-"
+
         if item.get("start_file") and item.get("start_pos") and item.get("end_file") and item.get("end_pos"):
             item["rango"] = f"{item['start_file']}:{item['start_pos']} → {item['end_file']}:{item['end_pos']}"
 
         history.append(item)
 
     return list(reversed(history[-limit:]))
-
 
 def log_event(
     tipo: str,
