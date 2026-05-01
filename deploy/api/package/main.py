@@ -640,20 +640,17 @@ def ssh_run(host: str, script: str, args: list[str]) -> dict[str, Any]:
 
 def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
     """Carga el historial generado por backups_api.sh desde el servidor de backups."""
-
     result = ssh_run(
         SERVIDOR_BACKUPS,
-        "cat",
-        ["/home/dasc/backups/.dasc/history.tsv"],
+        "/bin/bash",
+        ["-lc", "cat /home/dasc/backups/.dasc/history.tsv 2>/dev/null || true"],
     )
 
     raw = result.get("stdout", "") if result.get("ok") else ""
-
     if not raw.strip():
         return []
 
     lines = [line for line in raw.splitlines() if line.strip()]
-
     if len(lines) <= 1:
         return []
 
@@ -662,17 +659,14 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
 
     for line in lines[1:]:
         parts = line.split("\t")
-
         while len(parts) < len(header):
             parts.append("")
 
         item = dict(zip(header, parts))
-
         path = item.get("file", "")
         item["filename"] = path.split("/")[-1] if path else "-"
 
         backup_type = item.get("type", "")
-
         if backup_type == "full":
             item["tipo_label"] = "Completo"
         elif backup_type == "incremental":
@@ -683,13 +677,151 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
             item["tipo_label"] = backup_type or "-"
 
         item["rango"] = "-"
-
         if item.get("start_file") and item.get("start_pos") and item.get("end_file") and item.get("end_pos"):
             item["rango"] = f"{item['start_file']}:{item['start_pos']} → {item['end_file']}:{item['end_pos']}"
 
         history.append(item)
 
     return list(reversed(history[-limit:]))
+
+
+
+def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
+    # Calcula qué copias se eliminarán si se borra backup_id.
+    # La eliminación es en cascada: copia indicada + dependientes directas e indirectas.
+
+    target_id = str(backup_id)
+
+    by_id: dict[str, dict[str, str]] = {}
+    children: dict[str, list[dict[str, str]]] = {}
+
+    for item in history:
+        item_id = str(item.get("id", "")).strip()
+        if not item_id:
+            continue
+
+        by_id[item_id] = item
+
+        base_id = str(item.get("base_id", "") or "").strip()
+        if base_id:
+            children.setdefault(base_id, []).append(item)
+
+    if target_id not in by_id:
+        raise ValueError(f"No existe ningún backup con ID={backup_id}.")
+
+    for key in children:
+        children[key].sort(key=lambda x: int(str(x.get("id", "0")) or 0))
+
+    ids_to_delete: list[str] = []
+    visited: set[str] = set()
+
+    def visit(current_id: str) -> None:
+        if current_id in visited:
+            return
+
+        visited.add(current_id)
+        ids_to_delete.append(current_id)
+
+        for child in children.get(current_id, []):
+            child_id = str(child.get("id", "")).strip()
+            if child_id:
+                visit(child_id)
+
+    visit(target_id)
+
+    items = [by_id[item_id] for item_id in ids_to_delete if item_id in by_id]
+
+    return {
+        "target": by_id[target_id],
+        "items": items,
+        "ids": ids_to_delete,
+        "ids_csv": ", ".join(ids_to_delete),
+        "has_dependents": len(ids_to_delete) > 1,
+        "dependents_count": max(0, len(ids_to_delete) - 1),
+    }
+
+
+def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
+    # Elimina del servidor de backups una lista de IDs ya calculada.
+    # Seguridad: IDs numéricos, rutas dentro de /home/dasc/backups y actualización de history.tsv.
+
+    clean_ids: list[str] = []
+
+    for item_id in ids:
+        item_id = str(item_id).strip()
+        if not item_id.isdigit():
+            return {
+                "ok": False,
+                "code": 400,
+                "stdout": "",
+                "stderr": "",
+                "text": f"ERROR: ID no válido para eliminación: {item_id}",
+            }
+        clean_ids.append(item_id)
+
+    if not clean_ids:
+        return {
+            "ok": False,
+            "code": 400,
+            "stdout": "",
+            "stderr": "",
+            "text": "ERROR: No se ha indicado ningún ID para eliminar.",
+        }
+
+    ids_str = " ".join(clean_ids)
+
+    remote_cmd = f"""
+set -euo pipefail
+
+HIST="/home/dasc/backups/.dasc/history.tsv"
+IDS="{ids_str}"
+
+if [[ ! -f "$HIST" ]]; then
+  echo "ERROR: No existe el historial de backups."
+  exit 1
+fi
+
+for ID in $IDS; do
+  FILE="$(awk -F'\\t' -v id="$ID" 'NR > 1 && $1 == id {{ print $5; exit }}' "$HIST")"
+
+  if [[ -z "$FILE" ]]; then
+    echo "ERROR: No existe ningún backup con ID=$ID."
+    exit 2
+  fi
+
+  case "$FILE" in
+    /home/dasc/backups/*)
+      ;;
+    *)
+      echo "ERROR: Ruta no permitida para ID=$ID: $FILE"
+      exit 3
+      ;;
+  esac
+
+  rm -f -- "$FILE"
+done
+
+TMP="${{HIST}}.tmp.$$"
+awk -F'\\t' -v ids="$IDS" '
+BEGIN {{
+  split(ids, arr, " ")
+  for (i in arr) {{
+    del[arr[i]] = 1
+  }}
+}}
+NR == 1 || !($1 in del) {{ print }}
+' "$HIST" > "$TMP"
+
+mv "$TMP" "$HIST"
+
+echo "OK: Backups eliminados correctamente. IDs: $IDS"
+"""
+
+    return ssh_run(
+        SERVIDOR_BACKUPS,
+        "/bin/bash",
+        ["-lc", remote_cmd],
+    )
 
 def log_event(
     tipo: str,
@@ -1527,6 +1659,96 @@ def is_ok(output: str) -> bool:
         or "creado en" in o
         or "backup completed" in o
         or "success" in o
+    )
+
+
+
+@app.post("/backups/delete/preview")
+def backups_delete_preview(
+    request: Request,
+    backup_id: int = Form(...),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    history = cargar_historial_backups(limit=1000)
+
+    try:
+        delete_plan = plan_eliminacion_backups(backup_id, history)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    context = get_common_context(request)
+    context["ok"] = None
+    context["msg"] = None
+    context["cacti_url"] = CACTI_URL
+    context["backup_history"] = history[:50]
+    context["delete_plan"] = delete_plan
+
+    return templates.TemplateResponse(request, "backups.html", context)
+
+
+@app.post("/backups/delete/confirm")
+def backups_delete_confirm(
+    request: Request,
+    backup_id: int = Form(...),
+    confirm_delete: str = Form(""),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    if confirm_delete != "SI":
+        return RedirectResponse(
+            url="/backups?ok=0&msg=Eliminacion+cancelada",
+            status_code=303,
+        )
+
+    history = cargar_historial_backups(limit=1000)
+
+    try:
+        delete_plan = plan_eliminacion_backups(backup_id, history)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    ids = delete_plan["ids"]
+    result = eliminar_backups_cascada_remoto(ids)
+    ok = 1 if result["ok"] and is_ok(result["text"]) else 0
+
+    if ok:
+        emit_alert(
+            "backup.delete.ok",
+            "info",
+            "Backups eliminados",
+            (
+                "<b>Backups eliminados</b>\n"
+                f"IDs: {', '.join(ids)}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}"
+            ),
+            "backups",
+        )
+    else:
+        emit_alert(
+            "backup.delete.error",
+            "critical",
+            "Error al eliminar backups",
+            (
+                "<b>Error al eliminar backups</b>\n"
+                f"IDs: {', '.join(ids)}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}\n"
+                f"Detalle: {result['text']}"
+            ),
+            "backups",
+        )
+
+    return RedirectResponse(
+        url=f"/backups?ok={ok}&msg={quote(result['text'])}",
+        status_code=303,
     )
 
 
