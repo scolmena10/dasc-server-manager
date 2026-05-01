@@ -181,6 +181,7 @@
               <th>Base</th>
               <th>Rango binlog</th>
               <th>Notas</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -204,12 +205,20 @@
               <td>{{ b.base_id or "-" }}</td>
               <td>{{ b.rango }}</td>
               <td>{{ b.notes or "-" }}</td>
+              <td>
+                <form method="post" action="/backups/delete/preview" style="display:inline;">
+                  <input type="hidden" name="backup_id" value="{{ b.id }}">
+                  <button type="submit" class="btn small danger">
+                    <i class="fa-solid fa-trash"></i> Eliminar
+                  </button>
+                </form>
+              </td>
             </tr>
             {% endfor %}
 
             {% if not backup_history %}
             <tr>
-              <td colspan="8" style="text-align:center;">No hay copias registradas todavía.</td>
+              <td colspan="9" style="text-align:center;">No hay copias registradas todavía.</td>
             </tr>
             {% endif %}
           </tbody>
@@ -304,5 +313,96 @@
     </form>
   </div>
 </section>
+
+{% if delete_plan %}
+<section class="modal is-open" id="modal-eliminar-backup">
+  <a href="/backups" class="modal__overlay" aria-label="Cancelar eliminación"></a>
+
+  <div class="modal__dialog" role="dialog" aria-modal="true" aria-label="Confirmar eliminación de backup">
+    <div class="modal__head">
+      <div class="modal__title">
+        <h3><i class="fa-solid fa-triangle-exclamation"></i> Confirmar eliminación</h3>
+        {% if delete_plan.has_dependents %}
+          <p>Esta copia tiene dependencias. Se eliminará la cadena completa.</p>
+        {% else %}
+          <p>Esta copia no tiene dependencias y se puede eliminar de forma individual.</p>
+        {% endif %}
+      </div>
+      <a class="modal__close" href="/backups" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+    </div>
+
+    {% if delete_plan.has_dependents %}
+    <div class="delete-warning">
+      <i class="fa-solid fa-link-slash"></i>
+      <div>
+        <strong>Atención:</strong>
+        si eliminas la copia ID {{ delete_plan.target.id }}, también se eliminarán
+        {{ delete_plan.dependents_count }} copia(s) dependiente(s). Esta acción no se puede deshacer.
+      </div>
+    </div>
+    {% else %}
+    <div class="delete-warning soft">
+      <i class="fa-solid fa-circle-info"></i>
+      <div>
+        Se eliminará únicamente la copia seleccionada y su archivo físico del servidor de backups.
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="bkp-table-wrap delete-table">
+      <table class="bkp-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Tipo</th>
+            <th>Archivo</th>
+            <th>Base</th>
+            <th>Rango binlog</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in delete_plan.items %}
+          <tr>
+            <td>{{ b.id }}</td>
+            <td>
+              {% if b.type == "full" %}
+                <span class="tag tag-full">Completo</span>
+              {% elif b.type == "incremental" %}
+                <span class="tag tag-inc">Incremental</span>
+              {% elif b.type == "differential" %}
+                <span class="tag tag-diff">Diferencial</span>
+              {% else %}
+                {{ b.tipo_label }}
+              {% endif %}
+            </td>
+            <td>{{ b.filename }}</td>
+            <td>{{ b.base_id or "-" }}</td>
+            <td>{{ b.rango }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="/backups/delete/confirm">
+      <input type="hidden" name="backup_id" value="{{ delete_plan.target.id }}">
+      <input type="hidden" name="confirm_delete" value="SI">
+
+      <div class="modal__foot">
+        <a class="btn" href="/backups"><i class="fa-solid fa-ban"></i> Cancelar</a>
+        <button class="btn danger" type="submit">
+          <i class="fa-solid fa-trash"></i>
+          {% if delete_plan.has_dependents %}
+            Eliminar cadena completa
+          {% else %}
+            Eliminar copia
+          {% endif %}
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
 </body>
 </html>
