@@ -1602,6 +1602,8 @@ def backups(request: Request):
     context["msg"] = msg
     context["cacti_url"] = CACTI_URL
     context["backup_history"] = cargar_historial_backups()
+    context["delete_plan"] = None
+
     return templates.TemplateResponse(request, "backups.html", context)
 
 
