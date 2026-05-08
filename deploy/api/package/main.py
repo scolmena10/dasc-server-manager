@@ -47,6 +47,11 @@ LOGS_DB_USER = os.getenv("LOGS_DB_USER", "dasc_logs")
 LOGS_DB_PASS = os.getenv("LOGS_DB_PASS", "dascpass")
 LOGS_ORIGIN = os.getenv("LOGS_ORIGIN", "dasc-web")
 
+TERMINAL_MAIN_HOST = os.getenv("TERMINAL_MAIN_HOST", "127.0.0.1")
+TERMINAL_DATABASE_HOST = os.getenv("TERMINAL_DATABASE_HOST", LOGS_DB_HOST)
+TERMINAL_TIMEOUT = int(os.getenv("TERMINAL_TIMEOUT", "30"))
+TERMINAL_MAX_COMMAND_LENGTH = int(os.getenv("TERMINAL_MAX_COMMAND_LENGTH", "4000"))
+
 SCRIPT_SERVICIOS = os.getenv("SCRIPT_SERVICIOS", "/usr/local/bin/servicios_api.sh")
 SCRIPT_BACKUPS = os.getenv("SCRIPT_BACKUPS", "/usr/local/bin/backups_api.sh")
 
@@ -65,12 +70,14 @@ ALERTS_DEFAULT_CHANNEL = os.getenv("ALERTS_DEFAULT_CHANNEL", "telegram")
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 USERS_FILE = DATA_DIR / "users.json"
+AUTH_LOGS_FILE = DATA_DIR / "auth_logs.json"
 
 AVAILABLE_PERMISSIONS = {
     "logs": "Logs",
     "backups": "Copias",
     "servicios": "Servicios",
     "alertas": "Alertas",
+    "terminal": "Terminal",
 }
 
 
@@ -78,6 +85,85 @@ def ensure_users_file() -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     if not USERS_FILE.exists():
         USERS_FILE.write_text("[]", encoding="utf-8")
+
+
+def ensure_auth_logs_file() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not AUTH_LOGS_FILE.exists():
+        AUTH_LOGS_FILE.write_text("[]", encoding="utf-8")
+
+
+def load_auth_logs(limit: int | None = 200) -> list[dict[str, Any]]:
+    ensure_auth_logs_file()
+    try:
+        data = json.loads(AUTH_LOGS_FILE.read_text(encoding="utf-8"))
+        if isinstance(data, list):
+            valid_logs: list[dict[str, Any]] = []
+            for item in data:
+                if isinstance(item, dict):
+                    valid_logs.append(
+                        {
+                            "fecha": str(item.get("fecha", "")),
+                            "accion": str(item.get("accion", "")),
+                            "usuario": str(item.get("usuario", "anon")),
+                            "resultado": str(item.get("resultado", "")),
+                            "ip_origen": str(item.get("ip_origen", "")),
+                            "user_agent": str(item.get("user_agent", "")),
+                            "rol": str(item.get("rol", "")),
+                            "detalle": str(item.get("detalle", "")),
+                        }
+                    )
+            valid_logs.reverse()
+            if limit is None:
+                return valid_logs
+            return valid_logs[:limit]
+    except Exception as e:
+        print(f"Error cargando logs de inicio de sesión: {e}")
+    return []
+
+
+def save_auth_logs(logs: list[dict[str, Any]]) -> None:
+    ensure_auth_logs_file()
+    AUTH_LOGS_FILE.write_text(
+        json.dumps(logs, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+def register_auth_log(
+    request: Request,
+    accion: str,
+    usuario: str | None,
+    resultado: str,
+    rol: str | None = None,
+    detalle: str | None = None,
+) -> None:
+    ensure_auth_logs_file()
+    ip_origen = request.client.host if request.client else "desconocida"
+    user_agent = request.headers.get("user-agent", "desconocido")
+
+    try:
+        logs = json.loads(AUTH_LOGS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(logs, list):
+            logs = []
+    except Exception:
+        logs = []
+
+    logs.append(
+        {
+            "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "accion": accion,
+            "usuario": (usuario or "anon").strip() or "anon",
+            "resultado": resultado,
+            "ip_origen": ip_origen,
+            "user_agent": user_agent,
+            "rol": rol or "",
+            "detalle": detalle or "",
+        }
+    )
+
+    logs = logs[-1000:]
+    save_auth_logs(logs)
 
 
 def normalize_permissions(permissions: Any) -> list[str]:
@@ -188,6 +274,7 @@ def get_common_context(request: Request) -> dict[str, Any]:
         "can_backups": admin or "backups" in perms,
         "can_servicios": admin or "servicios" in perms,
         "can_alertas": admin or "alertas" in perms,
+        "can_terminal": admin or "terminal" in perms,
         "permission_labels": permission_labels_from_keys(effective_keys),
         "permissions_count": len(effective_keys),
     }
@@ -935,7 +1022,7 @@ class AuthAndLogMiddleware(BaseHTTPMiddleware):
         usuario = request.session.get("user", "anon")
         status = response.status_code
 
-        if path in ["/", "/servicios", "/backups", "/logs", "/admin/usuarios", "/alertas"]:
+        if path in ["/", "/servicios", "/backups", "/logs", "/admin/usuarios", "/admin/login-logs", "/alertas", "/terminal"]:
             tipo = "acceso"
         elif path.startswith("/servicios"):
             tipo = "servicio"
@@ -945,6 +1032,8 @@ class AuthAndLogMiddleware(BaseHTTPMiddleware):
             tipo = "admin"
         elif path.startswith("/alertas"):
             tipo = "alerta"
+        elif path.startswith("/terminal") or path.startswith("/api/terminal"):
+            tipo = "terminal"
         elif path.startswith("/login") or path.startswith("/logout"):
             tipo = "login"
         else:
@@ -998,19 +1087,91 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
         request.session["user"] = auth_user["username"]
         request.session["is_admin"] = auth_user["is_admin"]
         request.session["permissions"] = auth_user["permissions"]
+
+        rol = "Administrador" if auth_user["is_admin"] else "Usuario"
+        register_auth_log(
+            request=request,
+            accion="LOGIN",
+            usuario=auth_user["username"],
+            resultado="OK",
+            rol=rol,
+            detalle="Inicio de sesión correcto",
+        )
+        log_event(
+            tipo="login",
+            resultado="OK",
+            usuario=auth_user["username"],
+            ip_origen=request.client.host if request.client else None,
+            recurso="POST /login",
+            detalle="Inicio de sesión correcto",
+        )
         return RedirectResponse(url="/", status_code=303)
+
+    attempted_user = (username or "anon").strip() or "anon"
+    register_auth_log(
+        request=request,
+        accion="LOGIN",
+        usuario=attempted_user,
+        resultado="ERROR",
+        rol="No autenticado",
+        detalle="Intento de inicio de sesión fallido",
+    )
+    log_event(
+        tipo="login",
+        resultado="ERROR",
+        usuario=attempted_user,
+        ip_origen=request.client.host if request.client else None,
+        recurso="POST /login",
+        detalle="Intento de inicio de sesión fallido",
+    )
 
     return RedirectResponse(url="/login?error=1", status_code=303)
 
 
 @app.get("/logout")
 def logout_get(request: Request):
+    usuario = request.session.get("user", "anon")
+    rol = "Administrador" if request.session.get("is_admin", False) else "Usuario"
+    register_auth_log(
+        request=request,
+        accion="LOGOUT",
+        usuario=usuario,
+        resultado="OK",
+        rol=rol,
+        detalle="Cierre de sesión correcto",
+    )
+    log_event(
+        tipo="login",
+        resultado="OK",
+        usuario=usuario,
+        ip_origen=request.client.host if request.client else None,
+        recurso="GET /logout",
+        detalle="Cierre de sesión correcto",
+    )
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
 
 @app.post("/logout")
 def logout_post(request: Request):
+    usuario = request.session.get("user", "anon")
+    rol = "Administrador" if request.session.get("is_admin", False) else "Usuario"
+    register_auth_log(
+        request=request,
+        accion="LOGOUT",
+        usuario=usuario,
+        resultado="OK",
+        rol=rol,
+        detalle="Cierre de sesión correcto",
+    )
+    log_event(
+        tipo="login",
+        resultado="OK",
+        usuario=usuario,
+        ip_origen=request.client.host if request.client else None,
+        recurso="POST /logout",
+        detalle="Cierre de sesión correcto",
+    )
     request.session.clear()
     return RedirectResponse(url="/login", status_code=303)
 
@@ -1028,6 +1189,7 @@ def home(request: Request):
             1 if context["can_logs"] else 0,
             1 if context["can_servicios"] else 0,
             1 if context["can_alertas"] else 0,
+            1 if context["can_terminal"] else 0,
             1 if context["is_admin"] else 0,
         ]
     )
@@ -1051,6 +1213,24 @@ def admin_users_page(request: Request):
     context["available_permissions"] = AVAILABLE_PERMISSIONS
     context["users_count"] = len(context["users"]) + 1
     return templates.TemplateResponse(request, "admin_users.html", context)
+
+
+@app.get("/admin/login-logs")
+def admin_login_logs_page(request: Request):
+    if not is_admin(request):
+        return permission_redirect()
+
+    auth_logs = load_auth_logs(limit=200)
+
+    context = get_common_context(request)
+    context["auth_logs"] = auth_logs
+    context["auth_logs_total"] = len(auth_logs)
+    context["auth_logs_ok"] = sum(1 for e in auth_logs if e.get("resultado") == "OK")
+    context["auth_logs_error"] = sum(1 for e in auth_logs if e.get("resultado") != "OK")
+    context["auth_logs_login"] = sum(1 for e in auth_logs if e.get("accion") == "LOGIN")
+    context["auth_logs_logout"] = sum(1 for e in auth_logs if e.get("accion") == "LOGOUT")
+    context["auth_logs_last"] = auth_logs[0].get("fecha") if auth_logs else None
+    return templates.TemplateResponse(request, "admin_login_logs.html", context)
 
 
 @app.post("/admin/usuarios")
@@ -1137,6 +1317,251 @@ def delete_user(
         url="/admin/usuarios?ok=1&msg=Usuario+eliminado+correctamente",
         status_code=303,
     )
+
+
+
+# =====================
+# TERMINAL WEB
+# =====================
+def get_terminal_machines() -> dict[str, dict[str, str]]:
+    return {
+        "main": {
+            "key": "main",
+            "label": "Máquina Main",
+            "description": "Servidor donde se ejecuta el panel DASC y la API principal.",
+            "host": TERMINAL_MAIN_HOST,
+            "mode": "local",
+            "icon": "fa-computer",
+        },
+        "backup": {
+            "key": "backup",
+            "label": "Máquina Backup",
+            "description": "Servidor encargado de las copias de seguridad.",
+            "host": SERVIDOR_BACKUPS,
+            "mode": "ssh",
+            "icon": "fa-database",
+        },
+        "database": {
+            "key": "database",
+            "label": "Máquina Database",
+            "description": "Servidor de base de datos y almacenamiento de logs.",
+            "host": TERMINAL_DATABASE_HOST,
+            "mode": "ssh",
+            "icon": "fa-server",
+        },
+    }
+
+
+def get_terminal_machine(machine_key: str) -> dict[str, str] | None:
+    machine_key = (machine_key or "").strip().lower()
+    return get_terminal_machines().get(machine_key)
+
+
+def run_local_terminal_command(command: str) -> dict[str, Any]:
+    started = datetime.now()
+    try:
+        res = subprocess.run(
+            ["/bin/bash", "-lc", command],
+            cwd=str(BASE_DIR),
+            capture_output=True,
+            text=True,
+            timeout=TERMINAL_TIMEOUT,
+        )
+        finished = datetime.now()
+        out = res.stdout or ""
+        err = res.stderr or ""
+        return {
+            "ok": res.returncode == 0,
+            "code": res.returncode,
+            "stdout": out,
+            "stderr": err,
+            "text": out if res.returncode == 0 else (err or out),
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except subprocess.TimeoutExpired as e:
+        finished = datetime.now()
+        out = e.stdout or ""
+        err = e.stderr or ""
+        return {
+            "ok": False,
+            "code": 124,
+            "stdout": out if isinstance(out, str) else out.decode("utf-8", errors="replace"),
+            "stderr": err if isinstance(err, str) else err.decode("utf-8", errors="replace"),
+            "text": f"ERROR: el comando superó el tiempo máximo de {TERMINAL_TIMEOUT} segundos.",
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except Exception as e:
+        finished = datetime.now()
+        return {
+            "ok": False,
+            "code": 1,
+            "stdout": "",
+            "stderr": str(e),
+            "text": f"ERROR: {e}",
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+def run_ssh_terminal_command(host: str, command: str) -> dict[str, Any]:
+    started = datetime.now()
+    cmd = [
+        "ssh",
+        "-i", "/opt/dasc/api/.ssh/id_rsa_dasc",
+        "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "UserKnownHostsFile=/opt/dasc/api/.ssh/known_hosts_dasc",
+        f"{USUARIO}@{host}",
+        "bash",
+        "-s",
+    ]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            input=command,
+            capture_output=True,
+            text=True,
+            timeout=TERMINAL_TIMEOUT,
+        )
+        finished = datetime.now()
+        out = res.stdout or ""
+        err = res.stderr or ""
+        return {
+            "ok": res.returncode == 0,
+            "code": res.returncode,
+            "stdout": out,
+            "stderr": err,
+            "text": out if res.returncode == 0 else (err or out),
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except subprocess.TimeoutExpired as e:
+        finished = datetime.now()
+        out = e.stdout or ""
+        err = e.stderr or ""
+        return {
+            "ok": False,
+            "code": 124,
+            "stdout": out if isinstance(out, str) else out.decode("utf-8", errors="replace"),
+            "stderr": err if isinstance(err, str) else err.decode("utf-8", errors="replace"),
+            "text": f"ERROR: el comando superó el tiempo máximo de {TERMINAL_TIMEOUT} segundos.",
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    except Exception as e:
+        finished = datetime.now()
+        return {
+            "ok": False,
+            "code": 1,
+            "stdout": "",
+            "stderr": str(e),
+            "text": f"ERROR: {e}",
+            "started_at": started.strftime("%Y-%m-%d %H:%M:%S"),
+            "finished_at": finished.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+
+@app.get("/terminal")
+def terminal_page(request: Request):
+    if not has_permission(request, "terminal"):
+        return permission_redirect()
+
+    machines = get_terminal_machines()
+    context = get_common_context(request)
+    context["machines"] = machines
+    context["selected_machine"] = None
+    context["selected_key"] = None
+    context["terminal_timeout"] = TERMINAL_TIMEOUT
+    return templates.TemplateResponse(request, "terminal.html", context)
+
+
+@app.get("/terminal/{machine_key}")
+def terminal_machine_page(request: Request, machine_key: str):
+    if not has_permission(request, "terminal"):
+        return permission_redirect()
+
+    machine = get_terminal_machine(machine_key)
+    if not machine:
+        return RedirectResponse(
+            url="/terminal?msg=Maquina+no+valida",
+            status_code=303,
+        )
+
+    machines = get_terminal_machines()
+    context = get_common_context(request)
+    context["machines"] = machines
+    context["selected_machine"] = machine
+    context["selected_key"] = machine_key
+    context["terminal_timeout"] = TERMINAL_TIMEOUT
+    return templates.TemplateResponse(request, "terminal.html", context)
+
+
+@app.post("/api/terminal/run")
+def terminal_run_command(
+    request: Request,
+    machine: str = Form(...),
+    command: str = Form(...),
+):
+    if not has_permission(request, "terminal"):
+        return JSONResponse(
+            {"ok": False, "error": "No tienes permisos para usar la terminal."},
+            status_code=403,
+        )
+
+    terminal_machine = get_terminal_machine(machine)
+    if not terminal_machine:
+        return JSONResponse(
+            {"ok": False, "error": "Máquina no válida."},
+            status_code=400,
+        )
+
+    command = (command or "").strip()
+    if not command:
+        return JSONResponse(
+            {"ok": False, "error": "El comando no puede estar vacío."},
+            status_code=400,
+        )
+
+    if len(command) > TERMINAL_MAX_COMMAND_LENGTH:
+        return JSONResponse(
+            {"ok": False, "error": f"El comando supera el límite de {TERMINAL_MAX_COMMAND_LENGTH} caracteres."},
+            status_code=400,
+        )
+
+    if terminal_machine["mode"] == "local":
+        result = run_local_terminal_command(command)
+    else:
+        result = run_ssh_terminal_command(terminal_machine["host"], command)
+
+    usuario = request.session.get("user", "anon")
+    ip = request.client.host if request.client else None
+    detalle = (
+        f"Máquina: {terminal_machine['label']} ({terminal_machine['host']}) | "
+        f"Comando: {command} | Código: {result['code']}"
+    )
+    log_event(
+        tipo="terminal",
+        resultado="OK" if result["ok"] else "ERROR",
+        usuario=usuario,
+        ip_origen=ip,
+        recurso=f"POST /api/terminal/run/{terminal_machine['key']}",
+        detalle=detalle,
+    )
+
+    return {
+        "ok": result["ok"],
+        "code": result["code"],
+        "machine": terminal_machine,
+        "command": command,
+        "stdout": result["stdout"],
+        "stderr": result["stderr"],
+        "text": result["text"],
+        "started_at": result["started_at"],
+        "finished_at": result["finished_at"],
+    }
 
 
 # =====================
