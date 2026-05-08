@@ -115,48 +115,75 @@ if [[ -z "$BACKUP_HOST" ]]; then
   exit 1
 fi
 
-echo "==> Limpiando huellas SSH antiguas para ${BACKUP_HOST}"
-sudo -u "$APP_USER" ssh-keygen -R "$BACKUP_HOST" -f "$DASC_KNOWN_HOSTS" >/dev/null 2>&1 || true
-
-echo "==> Registrando host key actual de ${BACKUP_HOST}"
-if ! sudo -u "$APP_USER" ssh-keyscan -H "$BACKUP_HOST" > "$DASC_KNOWN_HOSTS" 2>/dev/null; then
-  echo "ERROR: no se pudo obtener la host key con ssh-keyscan para ${BACKUP_HOST}"
-  exit 1
+DATABASE_HOST="$(awk -F= '/^TERMINAL_DATABASE_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
+if [[ -z "$DATABASE_HOST" ]]; then
+  DATABASE_HOST="$(awk -F= '/^LOGS_DB_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
 fi
-chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
-chmod 644 "$DASC_KNOWN_HOSTS"
-
-echo "==> Configurando acceso SSH automático al servidor de backups (${BACKUP_HOST})"
-if [[ -z "${DASC_PASS:-}" ]]; then
-  echo
-  read -rsp "Introduce la contraseña actual del usuario dasc en ${BACKUP_HOST}: " DASC_PASS
-  echo
+if [[ -z "$DATABASE_HOST" ]]; then
+  DATABASE_HOST="192.168.60.20"
 fi
 
-if [[ -z "$DASC_PASS" ]]; then
-  echo "ERROR: la contraseña de dasc no puede estar vacía."
-  exit 1
-fi
+configure_ssh_target() {
+  local TARGET_HOST="$1"
+  local TARGET_LABEL="$2"
+  local TARGET_PASS="${3:-}"
 
-sudo -u "$APP_USER" sshpass -p "$DASC_PASS" ssh-copy-id \
-  -i "${DASC_KEY}.pub" \
-  -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
-  -o StrictHostKeyChecking=no \
-  "dasc@${BACKUP_HOST}" || {
-    echo "ERROR: no se pudo copiar la clave automáticamente a dasc@${BACKUP_HOST}."
+  if [[ -z "$TARGET_HOST" ]]; then
+    echo "==> Saltando ${TARGET_LABEL}: host vacío"
+    return 0
+  fi
+
+  echo "==> Limpiando huellas SSH antiguas para ${TARGET_LABEL} (${TARGET_HOST})"
+  sudo -u "$APP_USER" ssh-keygen -R "$TARGET_HOST" -f "$DASC_KNOWN_HOSTS" >/dev/null 2>&1 || true
+
+  echo "==> Registrando host key actual de ${TARGET_LABEL} (${TARGET_HOST})"
+  if ! sudo -u "$APP_USER" ssh-keyscan -H "$TARGET_HOST" >> "$DASC_KNOWN_HOSTS" 2>/dev/null; then
+    echo "ERROR: no se pudo obtener la host key con ssh-keyscan para ${TARGET_HOST}"
     exit 1
-  }
+  fi
+  chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
+  chmod 644 "$DASC_KNOWN_HOSTS"
 
-echo "==> Verificando acceso SSH sin contraseña con el SSH aislado de DASC"
-sudo -u "$APP_USER" ssh \
-  -i "$DASC_KEY" \
-  -o BatchMode=yes \
-  -o StrictHostKeyChecking=yes \
-  -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
-  "dasc@${BACKUP_HOST}" "hostname >/dev/null" || {
-    echo "ERROR: la verificación SSH sin contraseña ha fallado."
+  if [[ -z "$TARGET_PASS" ]]; then
+    echo
+    read -rsp "Introduce la contraseña actual del usuario dasc en ${TARGET_LABEL} (${TARGET_HOST}): " TARGET_PASS
+    echo
+  fi
+
+  if [[ -z "$TARGET_PASS" ]]; then
+    echo "ERROR: la contraseña de dasc para ${TARGET_LABEL} no puede estar vacía."
     exit 1
-  }
+  fi
+
+  echo "==> Copiando clave SSH de DASC a ${TARGET_LABEL} (${TARGET_HOST})"
+  sudo -u "$APP_USER" sshpass -p "$TARGET_PASS" ssh-copy-id \
+    -i "${DASC_KEY}.pub" \
+    -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+    -o StrictHostKeyChecking=no \
+    "dasc@${TARGET_HOST}" || {
+      echo "ERROR: no se pudo copiar la clave automáticamente a dasc@${TARGET_HOST}."
+      exit 1
+    }
+
+  echo "==> Verificando SSH sin contraseña contra ${TARGET_LABEL} (${TARGET_HOST})"
+  sudo -u "$APP_USER" ssh \
+    -i "$DASC_KEY" \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+    "dasc@${TARGET_HOST}" "hostname >/dev/null" || {
+      echo "ERROR: la verificación SSH sin contraseña ha fallado contra ${TARGET_HOST}."
+      exit 1
+    }
+}
+
+configure_ssh_target "$BACKUP_HOST" "servidor de backups" "${DASC_BACKUP_PASS:-${DASC_PASS:-}}"
+
+if [[ "$DATABASE_HOST" == "$BACKUP_HOST" ]]; then
+  echo "==> TERMINAL_DATABASE_HOST coincide con BACKUPS_HOST; no se repite la configuración SSH."
+else
+  configure_ssh_target "$DATABASE_HOST" "servidor de base de datos" "${DASC_DB_PASS:-${DASC_PASS:-}}"
+fi
 
 echo "==> Creando servicio systemd"
 cat > "$SERVICE_FILE" <<EOF2
@@ -209,7 +236,8 @@ echo "Usuario admin del panel: admin"
 echo "SSH aislado de DASC: ${DASC_SSH_DIR}"
 echo "Clave usada: ${DASC_KEY}"
 echo "Known hosts usado: ${DASC_KNOWN_HOSTS}"
-echo "SSH automático configurado contra: $BACKUP_HOST"
+echo "SSH automático configurado contra backups: $BACKUP_HOST"
+echo "SSH automático configurado contra DB terminal: $DATABASE_HOST"
 echo "URL local: http://127.0.0.1:8000"
 echo "URL red:   http://<IP_DEL_SERVIDOR>:8000"
 echo "============================================"
