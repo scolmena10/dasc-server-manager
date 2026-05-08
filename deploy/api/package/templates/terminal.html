@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DASC · Terminal</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .machine-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+    .machine-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      text-decoration: none;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: transform 0.12s ease, border-color 0.12s ease;
+    }
+    .machine-card:hover,
+    .machine-card.active {
+      transform: translateY(-2px);
+      border-color: #2563eb;
+    }
+    .machine-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .machine-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: #eff6ff;
+      border: 1px solid #dbeafe;
+      color: #1d4ed8;
+      font-size: 18px;
+    }
+    .machine-title {
+      font-weight: 800;
+      font-size: 16px;
+    }
+    .machine-host {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+    .machine-desc {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .terminal-panel {
+      grid-column: span 12;
+      background: #0b1220;
+      color: #e5e7eb;
+      border-radius: 16px;
+      border: 1px solid #111827;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #111827;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-wrap: wrap;
+    }
+    .terminal-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+    }
+    .terminal-meta {
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    .terminal-body {
+      padding: 16px;
+    }
+    .terminal-output {
+      min-height: 330px;
+      max-height: 520px;
+      overflow: auto;
+      background: #020617;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 14px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .terminal-line-command {
+      color: #93c5fd;
+    }
+    .terminal-line-ok {
+      color: #86efac;
+    }
+    .terminal-line-error {
+      color: #fca5a5;
+    }
+    .terminal-input-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+    .terminal-prompt {
+      color: #22c55e;
+      font-family: Consolas, Monaco, monospace;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .terminal-input {
+      flex: 1;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: #020617;
+      color: #f8fafc;
+      border-radius: 12px;
+      padding: 12px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 14px;
+      outline: none;
+    }
+    .terminal-input:focus {
+      border-color: #2563eb;
+    }
+    .quick-commands {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .quick-commands button {
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.06);
+      color: #e5e7eb;
+      padding: 8px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .terminal-warning {
+      margin-top: 12px;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      color: #fde68a;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    @media (max-width: 780px) {
+      .terminal-input-row {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .terminal-prompt {
+        white-space: normal;
+      }
+    }
+  </style>
+</head>
+<body>
+<header class="header">
+  <a href="/" class="brand">
+    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
+    <div class="brand-text">
+      <span class="brand-title">DASC Service</span>
+      <span class="brand-subtitle">Server Manager</span>
+    </div>
+  </a>
+
+  <h1>Terminal remota</h1>
+
+  <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
+  </a>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Menú</h2>
+    <nav class="menu">
+      <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+      {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+      {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
+      <a href="/terminal" class="active"><i class="fa-solid fa-terminal"></i> Terminal</a>
+      {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
+      {% if can_alertas %}<a href="/alertas"><i class="fa-solid fa-bell"></i> Alertas</a>{% endif %}
+    </nav>
+
+    <div class="history">
+      <h3>Terminal</h3>
+      <p><span class="dot ok"></span> Usuario: {{ user }}</p>
+      <p><span class="dot ok"></span> Timeout: {{ terminal_timeout }}s</p>
+      {% if selected_machine %}
+      <p><span class="dot ok"></span> Máquina: {{ selected_machine.label }}</p>
+      {% else %}
+      <p><span class="dot warn"></span> Selecciona una máquina</p>
+      {% endif %}
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2 class="page-title">Terminal</h2>
+        <p class="page-subtitle">Escoge una máquina y ejecuta comandos directamente desde el panel.</p>
+      </div>
+      <div class="topbar-actions">
+        <div class="status-pill"><i class="fa-solid fa-user"></i> {{ user }}</div>
+        <form method="post" action="/logout" class="logout-form">
+          <button type="submit" class="btn"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="machine-grid">
+      {% for key, machine in machines.items() %}
+      <a class="machine-card {% if selected_key == key %}active{% endif %}" href="/terminal/{{ key }}">
+        <div class="machine-top">
+          <div class="machine-icon"><i class="fa-solid {{ machine.icon }}"></i></div>
+          <div>
+            <div class="machine-title">{{ machine.label }}</div>
+            <div class="machine-host">{{ machine.host }} · {{ machine.mode }}</div>
+          </div>
+        </div>
+        <div class="machine-desc">{{ machine.description }}</div>
+      </a>
+      {% endfor %}
+    </div>
+
+    {% if selected_machine %}
+    <section class="terminal-panel">
+      <div class="terminal-header">
+        <div class="terminal-title">
+          <i class="fa-solid fa-terminal"></i>
+          <span>{{ selected_machine.label }}</span>
+        </div>
+        <div class="terminal-meta">Host: {{ selected_machine.host }} · Modo: {{ selected_machine.mode }}</div>
+      </div>
+      <div class="terminal-body">
+        <div id="terminalOutput" class="terminal-output">DASC Terminal preparada.
+Máquina seleccionada: {{ selected_machine.label }}
+Host: {{ selected_machine.host }}
+Escribe un comando y pulsa Enter.
+</div>
+
+        <form id="terminalForm" class="terminal-input-row">
+          <div class="terminal-prompt">{{ user }}@{{ selected_machine.key }}:$</div>
+          <input id="terminalCommand" class="terminal-input" type="text" name="command" autocomplete="off" placeholder="Ej: hostname && whoami && date" autofocus>
+          <button id="terminalRunBtn" class="btn primary" type="submit"><i class="fa-solid fa-play"></i> Ejecutar</button>
+        </form>
+
+        <div class="quick-commands">
+          <button type="button" data-command="hostname && whoami && date">hostname</button>
+          <button type="button" data-command="pwd && ls -la">pwd + ls</button>
+          <button type="button" data-command="df -h">df -h</button>
+          <button type="button" data-command="free -h">free -h</button>
+          <button type="button" data-command="systemctl --failed --no-pager">servicios fallidos</button>
+          <button type="button" data-command="ip -br a">interfaces</button>
+        </div>
+
+        <div class="terminal-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          Esta terminal ejecuta comandos reales. Los comandos largos o interactivos pueden cortarse al superar el timeout configurado.
+        </div>
+      </div>
+    </section>
+    {% else %}
+    <section class="card card-mini">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-terminal"></i></div>
+        <div class="card-title">
+          <h3>Selecciona una máquina</h3>
+          <p>Elige Main, Backup o Database para abrir la terminal correspondiente.</p>
+        </div>
+      </div>
+    </section>
+    {% endif %}
+  </main>
+</div>
+
+{% if selected_machine %}
+<script>
+const terminalForm = document.getElementById('terminalForm');
+const terminalCommand = document.getElementById('terminalCommand');
+const terminalOutput = document.getElementById('terminalOutput');
+const terminalRunBtn = document.getElementById('terminalRunBtn');
+const selectedMachine = '{{ selected_machine.key }}';
+
+function appendTerminal(text, className) {
+  const line = document.createElement('div');
+  if (className) {
+    line.className = className;
+  }
+  line.textContent = text;
+  terminalOutput.appendChild(line);
+  terminalOutput.scrollTop = terminalOutput.scrollHeight;
+}
+
+async function runCommand(command) {
+  const cleanCommand = command.trim();
+  if (!cleanCommand) {
+    return;
+  }
+
+  appendTerminal(`
+{{ user }}@${selectedMachine}:$ ${cleanCommand}`, 'terminal-line-command');
+  terminalCommand.value = '';
+  terminalCommand.disabled = true;
+  terminalRunBtn.disabled = true;
+  terminalRunBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ejecutando';
+
+  const formData = new FormData();
+  formData.append('machine', selectedMachine);
+  formData.append('command', cleanCommand);
+
+  try {
+    const response = await fetch('/api/terminal/run', {
+      method: 'POST',
+      body: formData
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.ok === false) {
+      appendTerminal(data.error || data.text || 'ERROR ejecutando el comando.', 'terminal-line-error');
+    } else {
+      if (data.stdout) {
+        appendTerminal(data.stdout.trimEnd(), 'terminal-line-ok');
+      }
+      if (data.stderr) {
+        appendTerminal(data.stderr.trimEnd(), 'terminal-line-error');
+      }
+      appendTerminal(`[exit code: ${data.code}] ${data.finished_at}`, data.ok ? 'terminal-line-ok' : 'terminal-line-error');
+    }
+  } catch (error) {
+    appendTerminal(`ERROR de conexión: ${error}`, 'terminal-line-error');
+  } finally {
+    terminalCommand.disabled = false;
+    terminalRunBtn.disabled = false;
+    terminalRunBtn.innerHTML = '<i class="fa-solid fa-play"></i> Ejecutar';
+    terminalCommand.focus();
+  }
+}
+
+terminalForm.addEventListener('submit', function(event) {
+  event.preventDefault();
+  runCommand(terminalCommand.value);
+});
+
+document.querySelectorAll('[data-command]').forEach(function(button) {
+  button.addEventListener('click', function() {
+    runCommand(button.dataset.command || '');
+  });
+});
+</script>
+{% endif %}
+</body>
+</html>

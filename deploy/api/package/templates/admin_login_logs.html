@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DASC · Logs de inicio de sesión</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/estilo.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/servicios.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .auth-log-table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #fff;
+    }
+    .auth-log-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+    .auth-log-table th,
+    .auth-log-table td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 13px;
+    }
+    .auth-log-table th {
+      background: #f8fafc;
+      color: #334155;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .auth-log-table tr:last-child td {
+      border-bottom: none;
+    }
+    .badge-auth {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .badge-auth.login {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-color: #bfdbfe;
+    }
+    .badge-auth.logout {
+      background: #f8fafc;
+      color: #475569;
+      border-color: #cbd5e1;
+    }
+    .badge-auth.ok {
+      background: var(--successBg);
+      color: var(--successText);
+      border-color: var(--successBorder);
+    }
+    .badge-auth.error {
+      background: var(--dangerBg);
+      color: var(--dangerText);
+      border-color: var(--dangerBorder);
+    }
+    .ua-cell {
+      max-width: 300px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .detail-cell {
+      max-width: 240px;
+      color: #334155;
+      word-break: break-word;
+    }
+  </style>
+</head>
+<body>
+<header class="header">
+  <a href="/" class="brand">
+    <img src="{{ url_for('static', path='img/logo-dasc.png') }}" class="logo" alt="DASC">
+    <div class="brand-text">
+      <span class="brand-title">DASC Service</span>
+      <span class="brand-subtitle">Server Manager</span>
+    </div>
+  </a>
+
+  <h1>Logs de inicio de sesión</h1>
+
+  <a href="https://agora.xtec.cat/iesmvm/" class="brand-right">
+    <img src="{{ url_for('static', path='img/logo-instituto.png') }}" class="logo" alt="MVM">
+  </a>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <h2>Menú</h2>
+    <nav class="menu">
+      <a href="/"><i class="fa-solid fa-house"></i> Panel</a>
+      {% if can_backups %}<a href="/backups"><i class="fa-solid fa-database"></i> Copias</a>{% endif %}
+      {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
+      {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
+      {% if can_terminal %}<a href="/terminal"><i class="fa-solid fa-terminal"></i> Terminal</a>{% endif %}
+      <a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>
+      <a href="/admin/login-logs" class="active"><i class="fa-solid fa-right-to-bracket"></i> Logs de inicio de sesión</a>
+    </nav>
+
+    <div class="history">
+      <h3>Auditoría</h3>
+      <p><span class="dot ok"></span> Registros cargados: {{ auth_logs_total }}</p>
+      <p><span class="dot ok"></span> Logins: {{ auth_logs_login }}</p>
+      <p><span class="dot off"></span> Logouts: {{ auth_logs_logout }}</p>
+      {% if auth_logs_last %}
+      <p><span class="dot warn"></span> Último evento: {{ auth_logs_last }}</p>
+      {% endif %}
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <h2 class="page-title">Auditoría de login y logout</h2>
+        <p class="page-subtitle">Registro privado del administrador con usuario, fecha, IP, navegador y resultado.</p>
+      </div>
+      <div class="topbar-actions">
+        <a class="btn" href="/admin/usuarios"><i class="fa-solid fa-arrow-left"></i> Volver a Administración</a>
+        <div class="status-pill"><i class="fa-solid fa-crown"></i> Solo admin</div>
+        <form method="post" action="/logout" class="logout-form">
+          <button type="submit" class="btn"><i class="fa-solid fa-right-from-bracket"></i> Cerrar sesión</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div><div class="kpi-label">Registros mostrados</div><div class="kpi-value">{{ auth_logs_total }}</div></div><i class="fa-solid fa-list-check"></i></div>
+      <div class="kpi-card"><div><div class="kpi-label">Correctos</div><div class="kpi-value ok">{{ auth_logs_ok }}</div></div><i class="fa-solid fa-circle-check"></i></div>
+      <div class="kpi-card"><div><div class="kpi-label">Fallidos</div><div class="kpi-value">{{ auth_logs_error }}</div></div><i class="fa-solid fa-triangle-exclamation"></i></div>
+    </div>
+
+    <section class="card card-mini" style="margin-top: 18px;">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-shield-halved"></i></div>
+        <div class="card-title">
+          <h3>Movimientos de autenticación</h3>
+          <p>Se guardan los inicios de sesión correctos, intentos fallidos y cierres de sesión de cualquier usuario.</p>
+        </div>
+      </div>
+
+      <div class="auth-log-table-wrap">
+        <table class="auth-log-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Acción</th>
+              <th>Resultado</th>
+              <th>Usuario</th>
+              <th>Rol</th>
+              <th>IP origen</th>
+              <th>Navegador / Cliente</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log in auth_logs %}
+            <tr>
+              <td>{{ log.fecha }}</td>
+              <td>
+                <span class="badge-auth {% if log.accion == 'LOGIN' %}login{% else %}logout{% endif %}">
+                  {% if log.accion == 'LOGIN' %}<i class="fa-solid fa-right-to-bracket"></i>{% else %}<i class="fa-solid fa-right-from-bracket"></i>{% endif %}
+                  {{ log.accion }}
+                </span>
+              </td>
+              <td>
+                <span class="badge-auth {% if log.resultado == 'OK' %}ok{% else %}error{% endif %}">
+                  {% if log.resultado == 'OK' %}<i class="fa-solid fa-check"></i>{% else %}<i class="fa-solid fa-xmark"></i>{% endif %}
+                  {{ log.resultado }}
+                </span>
+              </td>
+              <td><strong>{{ log.usuario }}</strong></td>
+              <td>{{ log.rol }}</td>
+              <td>{{ log.ip_origen }}</td>
+              <td class="ua-cell">{{ log.user_agent }}</td>
+              <td class="detail-cell">{{ log.detalle }}</td>
+            </tr>
+            {% endfor %}
+            {% if not auth_logs %}
+            <tr>
+              <td colspan="8" style="text-align:center; padding: 24px; color: var(--muted);">Todavía no hay logs de inicio o cierre de sesión.</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
