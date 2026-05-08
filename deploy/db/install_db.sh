@@ -11,6 +11,15 @@ BACKUP_ALLOWED_HOST="${BACKUP_ALLOWED_HOST:-192.168.60.30}"
 
 MARIADB_CNF="/etc/mysql/mariadb.conf.d/50-server.cnf"
 
+# Usuario SSH usado por la API/Terminal para entrar en esta máquina DB
+APP_USER="${APP_USER:-dasc}"
+APP_GROUP="${APP_GROUP:-$APP_USER}"
+APP_HOME="/home/${APP_USER}"
+SSHD_CONFIG="/etc/ssh/sshd_config"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+OPTIONAL_API_PUBKEY="$SCRIPT_DIR/api_panel.pub"
+
 DB_SERVER_ID="${DB_SERVER_ID:-20}"
 BINLOG_BASENAME="${BINLOG_BASENAME:-/var/log/mysql/dasc-bin}"
 BINLOG_FORMAT="${BINLOG_FORMAT:-ROW}"
@@ -22,9 +31,74 @@ if [[ "$EUID" -ne 0 ]]; then
   exit 1
 fi
 
-echo "==> Instalando MariaDB"
+echo "==> Instalando MariaDB, SSH y sudo"
 apt update
-DEBIAN_FRONTEND=noninteractive apt install -y mariadb-server mariadb-client
+DEBIAN_FRONTEND=noninteractive apt install -y mariadb-server mariadb-client openssh-server sudo
+
+echo "==> Preparando SSH para la terminal remota de DASC"
+systemctl enable --now ssh
+
+if [[ -f "$SSHD_CONFIG" ]]; then
+  echo "==> Asegurando autenticación por contraseña y clave pública en SSH"
+
+  if grep -qE '^[#[:space:]]*PasswordAuthentication' "$SSHD_CONFIG"; then
+    sed -i -E 's|^[#[:space:]]*PasswordAuthentication[[:space:]]+.*|PasswordAuthentication yes|g' "$SSHD_CONFIG"
+  else
+    echo 'PasswordAuthentication yes' >> "$SSHD_CONFIG"
+  fi
+
+  if grep -qE '^[#[:space:]]*PubkeyAuthentication' "$SSHD_CONFIG"; then
+    sed -i -E 's|^[#[:space:]]*PubkeyAuthentication[[:space:]]+.*|PubkeyAuthentication yes|g' "$SSHD_CONFIG"
+  else
+    echo 'PubkeyAuthentication yes' >> "$SSHD_CONFIG"
+  fi
+
+  systemctl restart ssh
+fi
+
+echo "==> Creando usuario SSH de servicio ${APP_USER}"
+if ! id "${APP_USER}" >/dev/null 2>&1; then
+  useradd -m -s /bin/bash "${APP_USER}"
+fi
+
+if [[ -z "${APP_PASSWORD:-}" ]]; then
+  echo
+  read -rsp "Introduce la contraseña para el usuario ${APP_USER} en esta máquina DB: " APP_PASSWORD
+  echo
+  read -rsp "Repite la contraseña para ${APP_USER}: " APP_PASSWORD_CONFIRM
+  echo
+
+  if [[ "$APP_PASSWORD" != "$APP_PASSWORD_CONFIRM" ]]; then
+    echo "ERROR: las contraseñas no coinciden."
+    exit 1
+  fi
+fi
+
+if [[ -z "$APP_PASSWORD" ]]; then
+  echo "ERROR: la contraseña de ${APP_USER} no puede estar vacía."
+  exit 1
+fi
+
+echo "${APP_USER}:${APP_PASSWORD}" | chpasswd
+echo "==> Contraseña de ${APP_USER} configurada"
+
+mkdir -p "${APP_HOME}/.ssh"
+touch "${APP_HOME}/.ssh/authorized_keys"
+chown -R "${APP_USER}:${APP_GROUP}" "${APP_HOME}"
+chmod 755 "${APP_HOME}"
+chmod 700 "${APP_HOME}/.ssh"
+chmod 600 "${APP_HOME}/.ssh/authorized_keys"
+
+if [[ -f "${OPTIONAL_API_PUBKEY}" ]]; then
+  echo "==> Instalando clave pública opcional desde api_panel.pub"
+  grep -qxF "$(cat "${OPTIONAL_API_PUBKEY}")" "${APP_HOME}/.ssh/authorized_keys" || \
+    cat "${OPTIONAL_API_PUBKEY}" >> "${APP_HOME}/.ssh/authorized_keys"
+  chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.ssh/authorized_keys"
+  chmod 600 "${APP_HOME}/.ssh/authorized_keys"
+else
+  echo "==> No se encontró api_panel.pub junto al instalador DB."
+  echo "==> La API podrá copiar su clave automáticamente con sshpass durante install_dasc_api.sh."
+fi
 
 echo "==> Configurando bind-address y binary logs en ${MARIADB_CNF}"
 if [[ ! -f "$MARIADB_CNF" ]]; then
@@ -97,8 +171,11 @@ FLUSH PRIVILEGES;
 SQL
 
 echo "==> Validaciones"
+systemctl --no-pager --full status ssh || true
 systemctl --no-pager --full status mariadb || true
-ss -lntp | grep 3306 || true
+id "${APP_USER}" || true
+ls -ld "${APP_HOME}" "${APP_HOME}/.ssh" || true
+ss -lntp | grep -E '(:22|:3306)' || true
 mariadb -e "SELECT User, Host FROM mysql.user WHERE User='${BACKUP_USER}';"
 mariadb -e "SHOW DATABASES LIKE '${DB_NAME}';"
 mariadb -e "SHOW GRANTS FOR '${BACKUP_USER}'@'${BACKUP_ALLOWED_HOST}';" || true
@@ -114,5 +191,7 @@ echo "TEST_TABLE=${TEST_TABLE}"
 echo "BACKUP_USER=${BACKUP_USER}"
 echo "BACKUP_ALLOWED_HOST=${BACKUP_ALLOWED_HOST}"
 echo "Binary logs: ${BINLOG_BASENAME}"
-echo "Puerto esperado: 3306"
+echo "Puerto SSH esperado: 22"
+echo "Puerto MariaDB esperado: 3306"
+echo "Usuario SSH para terminal: ${APP_USER}"
 echo "============================================"
