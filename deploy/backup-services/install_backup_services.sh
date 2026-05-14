@@ -48,6 +48,7 @@ apt update
 DEBIAN_FRONTEND=noninteractive apt install -y \
   openssh-server \
   sudo \
+  cron \
   default-mysql-client \
   mysql-client-8.0 \
   mysql-client-core-8.0 \
@@ -55,6 +56,9 @@ DEBIAN_FRONTEND=noninteractive apt install -y \
 
 echo "==> Habilitando SSH"
 systemctl enable --now ssh
+
+echo "==> Habilitando CRON"
+systemctl enable --now cron
 
 if [[ -f "$SSHD_CONFIG" ]]; then
   echo "==> Asegurando autenticación por contraseña y clave pública en SSH"
@@ -152,9 +156,11 @@ echo "==> Validando herramientas de base de datos"
 command -v mysql >/dev/null || { echo "ERROR: falta mysql"; exit 1; }
 command -v mysqldump >/dev/null || { echo "ERROR: falta mysqldump"; exit 1; }
 command -v mysqlbinlog >/dev/null || { echo "ERROR: falta mysqlbinlog"; exit 1; }
+command -v crontab >/dev/null || { echo "ERROR: falta crontab"; exit 1; }
 
 echo "==> Validaciones"
 systemctl --no-pager --full status ssh || true
+systemctl --no-pager --full status cron || true
 ls -l "${INSTALL_BACKUP_SCRIPT}"
 ls -l "${INSTALL_SERVICES_SCRIPT}"
 ls -ld "${BACKUP_DIR}"
