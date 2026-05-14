@@ -281,8 +281,9 @@
             {% if can_logs %}<a href="/logs"><i class="fa-solid fa-file-lines"></i> Logs</a>{% endif %}
             {% if can_servicios %}<a href="/servicios"><i class="fa-solid fa-server"></i> Servicios</a>{% endif %}
             {% if can_terminal %}<a href="/terminal"><i class="fa-solid fa-terminal"></i> Terminal</a>{% endif %}
-            <a href="/alertas" class="active"><i class="fa-solid fa-bell"></i> Alertas</a>
+            {% if can_alertas %}<a href="/alertas" class="active"><i class="fa-solid fa-bell"></i> Alertas</a>{% endif %}
             {% if is_admin %}<a href="/admin/usuarios"><i class="fa-solid fa-user-shield"></i> Administración</a>{% endif %}
+            {% if is_admin %}<a href="/admin/login-logs"><i class="fa-solid fa-right-to-bracket"></i> Logs de inicio de sesión</a>{% endif %}
         </nav>
 
         <div class="history">
