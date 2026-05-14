@@ -31,12 +31,12 @@ REPO_DIR="${REPO_DIR:-/home/${APP_USER}/dasc-server-manager}"
 PACKAGE_DIR="${PACKAGE_DIR:-${REPO_DIR}/deploy/api/package}"
 
 if [[ ! -d "$REPO_DIR/.git" ]]; then
-  echo "ERROR: no existe un repositorio Git válido en $REPO_DIR"
+  echo "ERROR: no existe un repositorio Git vÃ¡lido en $REPO_DIR"
   exit 1
 fi
 
 if [[ ! -d "$INSTALL_DIR" ]]; then
-  echo "ERROR: no existe la instalación en $INSTALL_DIR"
+  echo "ERROR: no existe la instalaciÃ³n en $INSTALL_DIR"
   exit 1
 fi
 
@@ -63,14 +63,14 @@ echo " Servicio: ${SERVICE_NAME}"
 echo " Usuario: ${APP_USER}"
 echo " Repo: ${REPO_DIR}"
 echo " Package: ${PACKAGE_DIR}"
-echo " Instalación: ${INSTALL_DIR}"
+echo " InstalaciÃ³n: ${INSTALL_DIR}"
 echo " Rama: ${BRANCH}"
 
-echo "==> Actualizando código desde GitHub (${BRANCH})"
+echo "==> Actualizando cÃ³digo desde GitHub (${BRANCH})"
 git -C "$REPO_DIR" fetch --all --prune
 
 if [[ -n "$(git -C "$REPO_DIR" status --porcelain)" ]]; then
-  echo "==> Aviso: hay cambios locales en el repo del servidor; se descartarán para dejarlo alineado con origin/${BRANCH}"
+  echo "==> Aviso: hay cambios locales en el repo del servidor; se descartarÃ¡n para dejarlo alineado con origin/${BRANCH}"
 fi
 
 git -C "$REPO_DIR" reset --hard "origin/${BRANCH}"
@@ -82,7 +82,7 @@ rsync -av --delete \
   --exclude='.ssh' \
   "$PACKAGE_DIR/" "$INSTALL_DIR/"
 
-echo "==> Ajustando permisos de la instalación"
+echo "==> Ajustando permisos de la instalaciÃ³n"
 chown -R "$APP_USER:$APP_GROUP" "$INSTALL_DIR"
 if [[ -f "$INSTALL_DIR/config.env" ]]; then
   chmod 640 "$INSTALL_DIR/config.env"
@@ -107,31 +107,51 @@ if [[ -z "$BACKUP_HOST" ]]; then
   exit 1
 fi
 
-echo "==> Asegurando known_hosts del SSH aislado"
-if ! sudo -u "$APP_USER" ssh-keyscan -H "$BACKUP_HOST" > "$DASC_KNOWN_HOSTS" 2>/dev/null; then
-  echo "ERROR: no se pudo regenerar $DASC_KNOWN_HOSTS con ssh-keyscan"
-  exit 1
+DATABASE_HOST="$(awk -F= '/^TERMINAL_DATABASE_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
+if [[ -z "$DATABASE_HOST" ]]; then
+  DATABASE_HOST="$(awk -F= '/^LOGS_DB_HOST=/{print $2}' "$INSTALL_DIR/config.env" | tail -n1 | tr -d '[:space:]' || true)"
 fi
+
+HOSTS_TO_CHECK=("$BACKUP_HOST")
+
+if [[ -n "$DATABASE_HOST" && "$DATABASE_HOST" != "$BACKUP_HOST" ]]; then
+  HOSTS_TO_CHECK+=("$DATABASE_HOST")
+fi
+
+echo "==> Asegurando known_hosts del SSH aislado"
+: > "$DASC_KNOWN_HOSTS"
+
+for TARGET_HOST in "${HOSTS_TO_CHECK[@]}"; do
+  echo "==> Registrando host key de ${TARGET_HOST}"
+  if ! sudo -u "$APP_USER" ssh-keyscan -H "$TARGET_HOST" >> "$DASC_KNOWN_HOSTS" 2>/dev/null; then
+    echo "ERROR: no se pudo obtener host key de ${TARGET_HOST}"
+    exit 1
+  fi
+done
+
 chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
 chmod 644 "$DASC_KNOWN_HOSTS"
 
 echo "==> Verificando SSH aislado"
-sudo -u "$APP_USER" ssh \
-  -i "$DASC_KEY" \
-  -o BatchMode=yes \
-  -o StrictHostKeyChecking=yes \
-  -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
-  "dasc@${BACKUP_HOST}" "hostname >/dev/null" || {
-    echo "ERROR: la verificación SSH del panel ha fallado."
-    exit 1
-  }
+for TARGET_HOST in "${HOSTS_TO_CHECK[@]}"; do
+  echo "==> Verificando SSH contra ${TARGET_HOST}"
+  sudo -u "$APP_USER" ssh \
+    -i "$DASC_KEY" \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+    "dasc@${TARGET_HOST}" "hostname >/dev/null" || {
+      echo "ERROR: la verificaciÃ³n SSH del panel ha fallado contra ${TARGET_HOST}."
+      exit 1
+    }
+done
 
 recreate_venv="0"
 if [[ ! -d "$VENV_DIR" ]]; then
-  echo "==> No existe el entorno virtual. Se creará de nuevo"
+  echo "==> No existe el entorno virtual. Se crearÃ¡ de nuevo"
   recreate_venv="1"
 elif [[ ! -x "$VENV_DIR/bin/python" ]]; then
-  echo "==> El entorno virtual existe pero está roto. Se recreará"
+  echo "==> El entorno virtual existe pero estÃ¡ roto. Se recrearÃ¡"
   recreate_venv="1"
 fi
 
@@ -147,11 +167,11 @@ echo "==> Instalando dependencias Python"
 sudo -u "$APP_USER" "$VENV_DIR/bin/python" -m pip install -r "$INSTALL_DIR/requirements.txt"
 
 if [[ ! -x "$VENV_DIR/bin/uvicorn" ]]; then
-  echo "ERROR: no existe $VENV_DIR/bin/uvicorn después de instalar dependencias"
+  echo "ERROR: no existe $VENV_DIR/bin/uvicorn despuÃ©s de instalar dependencias"
   exit 1
 fi
 
-echo "==> Comprobando imports mínimos"
+echo "==> Comprobando imports mÃ­nimos"
 sudo -u "$APP_USER" "$VENV_DIR/bin/python" -c "import fastapi, uvicorn; print('Imports OK')"
 
 echo "==> Recargando systemd"
