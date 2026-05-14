@@ -300,3 +300,66 @@
 .delete-table{
   margin: 14px 18px 0;
 }
+
+.automation-layout{
+  display:grid;
+  grid-template-columns: minmax(0, 2fr) minmax(260px, .8fr);
+  gap: 16px;
+  align-items:start;
+}
+
+.automation-form{
+  padding: 0;
+}
+
+.cron-callout{
+  margin-top: 0;
+}
+
+.automation-side{
+  display:flex;
+  flex-direction:column;
+  gap: 12px;
+}
+
+.automation-help code{
+  display:block;
+  margin-top:8px;
+  padding:9px 10px;
+  border-radius:10px;
+  background:#111827;
+  color:#e5e7eb;
+  font-size:12px;
+  overflow:auto;
+}
+
+.automation-foot{
+  display:flex;
+  justify-content:flex-end;
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.automation-table-block{
+  margin-top: 18px;
+}
+
+.section-subtitle{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 15px;
+}
+
+.muted-small{
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 980px){
+  .automation-layout{
+    grid-template-columns: 1fr;
+  }
+}
