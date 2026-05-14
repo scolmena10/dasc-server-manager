@@ -159,6 +159,188 @@
       </article>
     </section>
 
+
+    <section class="card card-mini" style="margin-top: 18px;">
+      <div class="card-head">
+        <div class="card-icon"><i class="fa-solid fa-calendar-days"></i></div>
+        <div class="card-title">
+          <h3>Automatización con CRON</h3>
+          <p>Programa copias automáticas en el servidor de backups sin perder el control de dependencias.</p>
+        </div>
+      </div>
+
+      <div class="automation-layout">
+        <form class="bkp-form automation-form" method="POST" action="/backups/automation/create">
+          <div class="callout cron-callout">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <div>
+              <strong>Control de dependencias:</strong>
+              las copias incrementales solo se pueden automatizar si ya existe una copia base de esa base de datos.
+              Las diferenciales solo se pueden automatizar si ya existe una copia completa.
+            </div>
+          </div>
+
+          <div class="form-grid">
+            <label class="field">
+              <span>Tipo de copia</span>
+              <select name="type" required>
+                <option value="full" selected>Completa</option>
+                <option value="incremental">Incremental</option>
+                <option value="differential">Diferencial</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Base de datos</span>
+              <input name="db" value="employees" required>
+            </label>
+
+            <label class="field">
+              <span>Carpeta destino</span>
+              <input name="dest" value="/home/dasc/backups" required>
+            </label>
+
+            <label class="field">
+              <span>Compresión</span>
+              <select name="compress">
+                <option value="gzip" selected>GZIP (.gz)</option>
+                <option value="none">Sin compresión</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Retención</span>
+              <select name="retention">
+                <option value="7" selected>7 días</option>
+                <option value="14">14 días</option>
+                <option value="30">30 días</option>
+                <option value="0">No borrar</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Frecuencia</span>
+              <select name="schedule_type">
+                <option value="daily" selected>Diaria</option>
+                <option value="weekly">Semanal</option>
+                <option value="monthly">Mensual</option>
+                <option value="hourly">Cada hora</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Hora</span>
+              <input type="time" name="schedule_time" value="02:00" required>
+            </label>
+
+            <label class="field">
+              <span>Día semanal</span>
+              <select name="weekday">
+                <option value="1" selected>Lunes</option>
+                <option value="2">Martes</option>
+                <option value="3">Miércoles</option>
+                <option value="4">Jueves</option>
+                <option value="5">Viernes</option>
+                <option value="6">Sábado</option>
+                <option value="0">Domingo</option>
+              </select>
+            </label>
+
+            <label class="field">
+              <span>Día mensual</span>
+              <select name="monthday">
+                {% for day in range(1, 29) %}
+                  <option value="{{ day }}" {% if day == 1 %}selected{% endif %}>Día {{ day }}</option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <label class="field field--full">
+              <span>Notas</span>
+              <input name="notes" placeholder="Ej: copia automática nocturna">
+            </label>
+          </div>
+
+          <div class="automation-foot">
+            <button class="btn primary" type="submit"><i class="fa-solid fa-calendar-plus"></i> Crear automatización</button>
+          </div>
+        </form>
+
+        <div class="automation-side">
+          <div class="help-box automation-help">
+            <h4><i class="fa-solid fa-circle-check"></i> Reglas aplicadas</h4>
+            <p><strong>Completa:</strong> se puede programar siempre.</p>
+            <p><strong>Incremental:</strong> necesita una copia anterior válida de la misma BD.</p>
+            <p><strong>Diferencial:</strong> necesita una copia completa previa de la misma BD.</p>
+          </div>
+
+          <div class="help-box automation-help">
+            <h4><i class="fa-solid fa-file-lines"></i> Log de CRON</h4>
+            <p>Las ejecuciones automáticas escriben su salida en:</p>
+            <code>/home/dasc/backups/.dasc/cron.log</code>
+          </div>
+        </div>
+      </div>
+
+      <div class="automation-table-block">
+        <h4 class="section-subtitle"><i class="fa-solid fa-list-check"></i> Automatizaciones activas</h4>
+        <div class="bkp-table-wrap">
+          <table class="bkp-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Tipo</th>
+                <th>BD</th>
+                <th>Frecuencia</th>
+                <th>Destino</th>
+                <th>Creada por</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for auto in backup_automations %}
+              <tr>
+                <td>{{ auto.id }}</td>
+                <td>
+                  {% if auto.type == "full" %}
+                    <span class="tag tag-full">Completa</span>
+                  {% elif auto.type == "incremental" %}
+                    <span class="tag tag-inc">Incremental</span>
+                  {% elif auto.type == "differential" %}
+                    <span class="tag tag-diff">Diferencial</span>
+                  {% else %}
+                    {{ auto.tipo_label }}
+                  {% endif %}
+                </td>
+                <td>{{ auto.db }}</td>
+                <td>
+                  <strong>{{ auto.schedule_label }}</strong><br>
+                  <span class="muted-small">{{ auto.cron_expression }}</span>
+                </td>
+                <td>{{ auto.dest }}</td>
+                <td>{{ auto.created_by or "-" }}</td>
+                <td>
+                  <form method="post" action="/backups/automation/delete" style="display:inline;">
+                    <input type="hidden" name="automation_id" value="{{ auto.id }}">
+                    <button type="submit" class="btn small danger">
+                      <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+
+              {% if not backup_automations %}
+              <tr>
+                <td colspan="7" style="text-align:center;">No hay automatizaciones CRON creadas todavía.</td>
+              </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
     
     <section class="card card-mini" style="margin-top: 18px;">
       <div class="card-head">
