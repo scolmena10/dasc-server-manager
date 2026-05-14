@@ -8,6 +8,7 @@ import os
 import json
 import sqlite3
 import subprocess
+import shlex
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -54,6 +55,8 @@ TERMINAL_MAX_COMMAND_LENGTH = int(os.getenv("TERMINAL_MAX_COMMAND_LENGTH", "4000
 
 SCRIPT_SERVICIOS = os.getenv("SCRIPT_SERVICIOS", "/usr/local/bin/servicios_api.sh")
 SCRIPT_BACKUPS = os.getenv("SCRIPT_BACKUPS", "/usr/local/bin/backups_api.sh")
+BACKUP_AUTOMATION_MARKER = "# DASC_BACKUP_AUTO"
+BACKUP_AUTOMATION_LOG = os.getenv("BACKUP_AUTOMATION_LOG", "/home/dasc/backups/.dasc/cron.log")
 
 # =====================
 # ALERTAS TELEGRAM
@@ -808,6 +811,197 @@ def cargar_historial_backups(limit: int = 50) -> list[dict[str, str]]:
 
     return list(reversed(history[-limit:]))
 
+
+def backup_has_incremental_base(db: str, history: list[dict[str, str]]) -> bool:
+    db = (db or "").strip()
+    for item in history:
+        if item.get("db") == db and item.get("end_file") and item.get("end_pos"):
+            return True
+    return False
+
+
+def backup_has_full_base(db: str, history: list[dict[str, str]]) -> bool:
+    db = (db or "").strip()
+    for item in history:
+        if item.get("db") == db and item.get("type") == "full" and item.get("end_file") and item.get("end_pos"):
+            return True
+    return False
+
+
+def backup_type_label(tipo: str) -> str:
+    if tipo == "full":
+        return "Completo"
+    if tipo == "incremental":
+        return "Incremental"
+    if tipo == "differential":
+        return "Diferencial"
+    return tipo or "-"
+
+
+def build_backup_cron_expression(schedule_type: str, schedule_time: str, weekday: str, monthday: str) -> tuple[str, str]:
+    schedule_type = (schedule_type or "daily").strip()
+    schedule_time = (schedule_time or "02:00").strip()
+    weekday = (weekday or "1").strip()
+    monthday = (monthday or "1").strip()
+
+    if ":" not in schedule_time:
+        raise ValueError("La hora debe tener formato HH:MM.")
+
+    hour_raw, minute_raw = schedule_time.split(":", 1)
+
+    if not hour_raw.isdigit() or not minute_raw.isdigit():
+        raise ValueError("La hora debe tener formato HH:MM.")
+
+    hour = int(hour_raw)
+    minute = int(minute_raw)
+
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("La hora indicada no es válida.")
+
+    if schedule_type == "hourly":
+        return f"{minute} * * * *", f"Cada hora en el minuto {minute:02d}"
+
+    if schedule_type == "daily":
+        return f"{minute} {hour} * * *", f"Cada día a las {hour:02d}:{minute:02d}"
+
+    if schedule_type == "weekly":
+        if weekday not in ["0", "1", "2", "3", "4", "5", "6"]:
+            raise ValueError("El día de la semana no es válido.")
+        weekday_labels = {
+            "0": "domingo",
+            "1": "lunes",
+            "2": "martes",
+            "3": "miércoles",
+            "4": "jueves",
+            "5": "viernes",
+            "6": "sábado",
+        }
+        return f"{minute} {hour} * * {weekday}", f"Cada {weekday_labels[weekday]} a las {hour:02d}:{minute:02d}"
+
+    if schedule_type == "monthly":
+        if not monthday.isdigit():
+            raise ValueError("El día del mes no es válido.")
+        day = int(monthday)
+        if day < 1 or day > 28:
+            raise ValueError("Para evitar problemas con meses cortos, usa un día entre 1 y 28.")
+        return f"{minute} {hour} {day} * *", f"Día {day} de cada mes a las {hour:02d}:{minute:02d}"
+
+    raise ValueError("La frecuencia seleccionada no es válida.")
+
+
+def build_backup_automation_name(tipo: str, db: str) -> str:
+    prefix = {
+        "full": "auto-full",
+        "incremental": "auto-inc",
+        "differential": "auto-diff",
+    }.get(tipo, "auto-backup")
+    clean_db = "".join(ch if ch.isalnum() or ch in ["_", "-"] else "_" for ch in db.strip()) or "db"
+    return f"{prefix}-{clean_db}-YYYYMMDD-HHMM.sql"
+
+
+def cargar_automatizaciones_backups() -> list[dict[str, Any]]:
+    result = ssh_run(SERVIDOR_BACKUPS, "crontab", ["-l"])
+
+    if not result.get("ok") and "no crontab" not in result.get("text", "").lower():
+        return []
+
+    raw = result.get("stdout", "") if result.get("ok") else ""
+    lines = raw.splitlines()
+    automations: list[dict[str, Any]] = []
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if line.startswith(BACKUP_AUTOMATION_MARKER):
+            metadata_raw = line.replace(BACKUP_AUTOMATION_MARKER, "", 1).strip()
+            command_line = ""
+
+            if i + 1 < len(lines):
+                command_line = lines[i + 1].strip()
+
+            try:
+                metadata = json.loads(metadata_raw)
+                if isinstance(metadata, dict):
+                    metadata["cron_line"] = command_line
+                    metadata["tipo_label"] = backup_type_label(str(metadata.get("type", "")))
+                    automations.append(metadata)
+            except Exception:
+                pass
+
+            i += 2
+            continue
+
+        i += 1
+
+    return list(reversed(automations))
+
+
+def crear_automatizacion_backup_remota(metadata: dict[str, Any], cron_expression: str, command_line: str) -> dict[str, Any]:
+    metadata_json = json.dumps(metadata, ensure_ascii=False)
+    block = f"{BACKUP_AUTOMATION_MARKER} {metadata_json}\n{cron_expression} {command_line}\n"
+
+    script = f"""
+set -euo pipefail
+TMP="$(mktemp)"
+crontab -l 2>/dev/null > "$TMP" || true
+cat >> "$TMP" <<'DASC_CRON_BLOCK'
+{block.rstrip()}
+DASC_CRON_BLOCK
+crontab "$TMP"
+rm -f "$TMP"
+mkdir -p "$(dirname {shlex.quote(BACKUP_AUTOMATION_LOG)})"
+echo "OK: Automatización creada con ID {metadata['id']}"
+"""
+    return ssh_run_stdin(SERVIDOR_BACKUPS, script)
+
+
+def eliminar_automatizacion_backup_remota(automation_id: str) -> dict[str, Any]:
+    automation_id = (automation_id or "").strip()
+
+    if not automation_id:
+        return {
+            "ok": False,
+            "code": 400,
+            "stdout": "",
+            "stderr": "",
+            "text": "ERROR: No se ha indicado ninguna automatización.",
+        }
+
+    script = f"""
+set -euo pipefail
+AUTO_ID={shlex.quote(automation_id)}
+TMP_IN="$(mktemp)"
+TMP_OUT="$(mktemp)"
+crontab -l 2>/dev/null > "$TMP_IN" || true
+SKIP_NEXT=0
+FOUND=0
+while IFS= read -r LINE; do
+  if [[ "$SKIP_NEXT" == "1" ]]; then
+    SKIP_NEXT=0
+    continue
+  fi
+
+  if [[ "$LINE" == "{BACKUP_AUTOMATION_MARKER}"* && "$LINE" == *"\\\"id\\\": \\\"$AUTO_ID\\\""* ]]; then
+    FOUND=1
+    SKIP_NEXT=1
+    continue
+  fi
+
+  printf '%s\n' "$LINE" >> "$TMP_OUT"
+done < "$TMP_IN"
+crontab "$TMP_OUT"
+rm -f "$TMP_IN" "$TMP_OUT"
+if [[ "$FOUND" == "1" ]]; then
+  echo "OK: Automatización eliminada con ID $AUTO_ID"
+else
+  echo "ERROR: No existe una automatización con ID $AUTO_ID"
+  exit 1
+fi
+"""
+    return ssh_run_stdin(SERVIDOR_BACKUPS, script)
+
+
 def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
 
     target_id = str(backup_id)
@@ -945,6 +1139,12 @@ def log_event(
     recurso: str | None = None,
     detalle: str | None = None,
 ) -> None:
+    if recurso and len(recurso) > 120:
+        recurso = recurso[:117] + "..."
+
+    if detalle and len(detalle) > 240:
+        detalle = detalle[:237] + "..."
+
     try:
         conn = pymysql.connect(
             host=LOGS_DB_HOST,
@@ -1021,6 +1221,9 @@ class AuthAndLogMiddleware(BaseHTTPMiddleware):
 
         usuario = request.session.get("user", "anon")
         status = response.status_code
+
+        if path.startswith("/login") or path.startswith("/logout"):
+            return response
 
         if path in ["/", "/servicios", "/backups", "/logs", "/admin/usuarios", "/admin/login-logs", "/alertas", "/terminal"]:
             tipo = "acceso"
@@ -2027,6 +2230,7 @@ def backups(request: Request):
     context["msg"] = msg
     context["cacti_url"] = CACTI_URL
     context["backup_history"] = cargar_historial_backups()
+    context["backup_automations"] = cargar_automatizaciones_backups()
     context["delete_plan"] = None
 
     return templates.TemplateResponse(request, "backups.html", context)
@@ -2117,6 +2321,207 @@ def is_ok(output: str) -> bool:
 
 
 
+
+@app.post("/backups/automation/create")
+def backups_automation_create(
+    request: Request,
+    type: str = Form(...),
+    db: str = Form(...),
+    dest: str = Form("/home/dasc/backups"),
+    compress: str = Form("gzip"),
+    retention: int = Form(7),
+    schedule_type: str = Form("daily"),
+    schedule_time: str = Form("02:00"),
+    weekday: str = Form("1"),
+    monthday: str = Form("1"),
+    notes: str = Form(""),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    if type not in ["full", "incremental", "differential"]:
+        return RedirectResponse(
+            url="/backups?ok=0&msg=Tipo+de+backup+no+valido",
+            status_code=303,
+        )
+
+    db = (db or "").strip()
+    dest = (dest or "/home/dasc/backups").strip()
+
+    if not db:
+        return RedirectResponse(
+            url="/backups?ok=0&msg=La+base+de+datos+es+obligatoria",
+            status_code=303,
+        )
+
+    if not dest.startswith("/home/dasc/backups"):
+        return RedirectResponse(
+            url="/backups?ok=0&msg=La+ruta+destino+debe+estar+dentro+de+/home/dasc/backups",
+            status_code=303,
+        )
+
+    if compress not in ["gzip", "none"]:
+        return RedirectResponse(
+            url="/backups?ok=0&msg=Compresion+no+valida",
+            status_code=303,
+        )
+
+    if retention < 0 or retention > 365:
+        return RedirectResponse(
+            url="/backups?ok=0&msg=Retencion+no+valida",
+            status_code=303,
+        )
+
+    history = cargar_historial_backups(limit=1000)
+
+    if type == "incremental" and not backup_has_incremental_base(db, history):
+        return RedirectResponse(
+            url="/backups?ok=0&msg=No+puedes+automatizar+una+incremental+sin+tener+antes+una+copia+base+de+esa+BD",
+            status_code=303,
+        )
+
+    if type == "differential" and not backup_has_full_base(db, history):
+        return RedirectResponse(
+            url="/backups?ok=0&msg=No+puedes+automatizar+una+diferencial+sin+tener+antes+una+copia+completa+de+esa+BD",
+            status_code=303,
+        )
+
+    try:
+        cron_expression, schedule_label = build_backup_cron_expression(schedule_type, schedule_time, weekday, monthday)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    automation_id = datetime.now().strftime("auto-%Y%m%d%H%M%S")
+    name = build_backup_automation_name(type, db)
+
+    base_ref = ""
+    if type == "incremental":
+        base_ref = "latest"
+    elif type == "differential":
+        base_ref = "last_full"
+
+    final_notes = (notes or "").strip()
+    if not final_notes:
+        final_notes = f"Automática CRON {automation_id}"
+
+    command_parts = [
+        SCRIPT_BACKUPS,
+        type,
+        db,
+        dest,
+        name,
+        compress,
+        str(retention),
+        base_ref,
+        final_notes,
+    ]
+
+    command_line = " ".join(shlex.quote(part) for part in command_parts)
+    command_line = f"mkdir -p {shlex.quote(str(Path(BACKUP_AUTOMATION_LOG).parent))} && {command_line} >> {shlex.quote(BACKUP_AUTOMATION_LOG)} 2>&1"
+
+    metadata = {
+        "id": automation_id,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "created_by": request.session.get("user", "desconocido"),
+        "type": type,
+        "db": db,
+        "dest": dest,
+        "compress": compress,
+        "retention": retention,
+        "schedule_type": schedule_type,
+        "schedule_time": schedule_time,
+        "weekday": weekday,
+        "monthday": monthday,
+        "schedule_label": schedule_label,
+        "cron_expression": cron_expression,
+        "name": name,
+        "notes": final_notes,
+    }
+
+    result = crear_automatizacion_backup_remota(metadata, cron_expression, command_line)
+    ok = 1 if result["ok"] else 0
+
+    if ok:
+        emit_alert(
+            "backup.automation.ok",
+            "info",
+            "Automatización de backup creada",
+            (
+                "<b>Automatización CRON creada</b>\n"
+                f"Tipo: {type}\n"
+                f"BD: {db}\n"
+                f"Horario: {schedule_label}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}"
+            ),
+            "backups",
+        )
+    else:
+        emit_alert(
+            "backup.automation.error",
+            "warning",
+            "Error al crear automatización",
+            (
+                "<b>Error al crear automatización CRON</b>\n"
+                f"Tipo: {type}\n"
+                f"BD: {db}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}\n"
+                f"Detalle: {result['text']}"
+            ),
+            "backups",
+        )
+
+    return RedirectResponse(
+        url=f"/backups?ok={ok}&msg={quote(result['text'])}",
+        status_code=303,
+    )
+
+
+@app.post("/backups/automation/delete")
+def backups_automation_delete(
+    request: Request,
+    automation_id: str = Form(...),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    result = eliminar_automatizacion_backup_remota(automation_id)
+    ok = 1 if result["ok"] else 0
+
+    if ok:
+        emit_alert(
+            "backup.automation.delete.ok",
+            "info",
+            "Automatización de backup eliminada",
+            (
+                "<b>Automatización CRON eliminada</b>\n"
+                f"ID: {automation_id}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}"
+            ),
+            "backups",
+        )
+    else:
+        emit_alert(
+            "backup.automation.delete.error",
+            "warning",
+            "Error al eliminar automatización",
+            (
+                "<b>Error al eliminar automatización CRON</b>\n"
+                f"ID: {automation_id}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}\n"
+                f"Detalle: {result['text']}"
+            ),
+            "backups",
+        )
+
+    return RedirectResponse(
+        url=f"/backups?ok={ok}&msg={quote(result['text'])}",
+        status_code=303,
+    )
+
+
 @app.post("/backups/delete/preview")
 def backups_delete_preview(
     request: Request,
@@ -2140,6 +2545,7 @@ def backups_delete_preview(
     context["msg"] = None
     context["cacti_url"] = CACTI_URL
     context["backup_history"] = history[:50]
+    context["backup_automations"] = cargar_automatizaciones_backups()
     context["delete_plan"] = delete_plan
 
     return templates.TemplateResponse(request, "backups.html", context)
