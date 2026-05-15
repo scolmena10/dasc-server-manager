@@ -139,10 +139,25 @@ configure_ssh_target() {
   echo "==> Registrando host key actual de ${TARGET_LABEL} (${TARGET_HOST})"
   if ! sudo -u "$APP_USER" ssh-keyscan -H "$TARGET_HOST" >> "$DASC_KNOWN_HOSTS" 2>/dev/null; then
     echo "ERROR: no se pudo obtener la host key con ssh-keyscan para ${TARGET_HOST}"
+    echo "Revisa que esa máquina esté encendida, tenga red y tenga SSH activo."
     exit 1
   fi
   chown "$APP_USER:$APP_GROUP" "$DASC_KNOWN_HOSTS"
   chmod 644 "$DASC_KNOWN_HOSTS"
+
+  echo "==> Comprobando si la clave SSH ya funciona contra ${TARGET_LABEL} (${TARGET_HOST})"
+  if sudo -u "$APP_USER" ssh \
+    -i "$DASC_KEY" \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=yes \
+    -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
+    "dasc@${TARGET_HOST}" "hostname >/dev/null"; then
+    echo "==> SSH ya estaba configurado contra ${TARGET_LABEL} (${TARGET_HOST})"
+    return 0
+  fi
+
+  echo "AVISO: la clave todavía no está autorizada en ${TARGET_LABEL} (${TARGET_HOST})."
+  echo "==> Se copiará automáticamente con sshpass/ssh-copy-id."
 
   if [[ -z "$TARGET_PASS" ]]; then
     echo
@@ -159,9 +174,10 @@ configure_ssh_target() {
   sudo -u "$APP_USER" sshpass -p "$TARGET_PASS" ssh-copy-id \
     -i "${DASC_KEY}.pub" \
     -o UserKnownHostsFile="$DASC_KNOWN_HOSTS" \
-    -o StrictHostKeyChecking=no \
+    -o StrictHostKeyChecking=yes \
     "dasc@${TARGET_HOST}" || {
       echo "ERROR: no se pudo copiar la clave automáticamente a dasc@${TARGET_HOST}."
+      echo "Revisa que el usuario dasc exista, que la contraseña sea correcta y que PasswordAuthentication esté activo."
       exit 1
     }
 
@@ -175,6 +191,8 @@ configure_ssh_target() {
       echo "ERROR: la verificación SSH sin contraseña ha fallado contra ${TARGET_HOST}."
       exit 1
     }
+
+  echo "==> SSH configurado correctamente contra ${TARGET_LABEL} (${TARGET_HOST})"
 }
 
 configure_ssh_target "$BACKUP_HOST" "servidor de backups" "${DASC_BACKUP_PASS:-${DASC_PASS:-}}"
