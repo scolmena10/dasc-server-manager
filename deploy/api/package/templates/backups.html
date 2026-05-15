@@ -391,12 +391,21 @@
               <td>{{ b.rango }}</td>
               <td>{{ b.notes or "-" }}</td>
               <td>
-                <form method="post" action="/backups/delete/preview" style="display:inline;">
-                  <input type="hidden" name="backup_id" value="{{ b.id }}">
-                  <button type="submit" class="btn small danger">
-                    <i class="fa-solid fa-trash"></i> Eliminar
-                  </button>
-                </form>
+                <div class="row-actions">
+                  <form method="post" action="/backups/restore/preview" style="display:inline;">
+                    <input type="hidden" name="backup_id" value="{{ b.id }}">
+                    <button type="submit" class="btn small restore">
+                      <i class="fa-solid fa-rotate-left"></i> Restaurar
+                    </button>
+                  </form>
+
+                  <form method="post" action="/backups/delete/preview" style="display:inline;">
+                    <input type="hidden" name="backup_id" value="{{ b.id }}">
+                    <button type="submit" class="btn small danger">
+                      <i class="fa-solid fa-trash"></i> Eliminar
+                    </button>
+                  </form>
+                </div>
               </td>
             </tr>
             {% endfor %}
@@ -498,6 +507,99 @@
     </form>
   </div>
 </section>
+
+
+{% if restore_plan %}
+<section class="modal is-open" id="modal-restaurar-backup">
+  <a href="/backups" class="modal__overlay" aria-label="Cancelar restauración"></a>
+
+  <div class="modal__dialog" role="dialog" aria-modal="true" aria-label="Confirmar restauración de backup">
+    <div class="modal__head">
+      <div class="modal__title">
+        <h3><i class="fa-solid fa-rotate-left"></i> Confirmar restauración</h3>
+        <p>La base de datos será restaurada al punto seleccionado.</p>
+      </div>
+      <a class="modal__close" href="/backups" aria-label="Cerrar"><i class="fa-solid fa-xmark"></i></a>
+    </div>
+
+    <div class="delete-warning">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <div>
+        <strong>Atención:</strong>
+        esta operación modificará la base de datos <strong>{{ restore_plan.db }}</strong>.
+        Antes de restaurar, el sistema creará una copia preventiva automática del estado actual.
+      </div>
+    </div>
+
+    {% if restore_plan.has_chain %}
+    <div class="delete-warning soft">
+      <i class="fa-solid fa-link"></i>
+      <div>
+        Para restaurar la copia ID {{ restore_plan.target.id }}, se aplicará esta cadena:
+        <strong>{{ restore_plan.ids_csv }}</strong>.
+      </div>
+    </div>
+    {% else %}
+    <div class="delete-warning soft">
+      <i class="fa-solid fa-circle-info"></i>
+      <div>
+        Esta restauración solo necesita aplicar la copia completa seleccionada.
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="bkp-table-wrap delete-table">
+      <table class="bkp-table">
+        <thead>
+          <tr>
+            <th>Orden</th>
+            <th>ID</th>
+            <th>Tipo</th>
+            <th>Archivo</th>
+            <th>Base</th>
+            <th>Rango binlog</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in restore_plan["items"] %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ b.id }}</td>
+            <td>
+              {% if b.type == "full" %}
+                <span class="tag tag-full">Completo</span>
+              {% elif b.type == "incremental" %}
+                <span class="tag tag-inc">Incremental</span>
+              {% elif b.type == "differential" %}
+                <span class="tag tag-diff">Diferencial</span>
+              {% else %}
+                {{ b.tipo_label }}
+              {% endif %}
+            </td>
+            <td>{{ b.filename }}</td>
+            <td>{{ b.base_id or "-" }}</td>
+            <td>{{ b.rango }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <form method="post" action="/backups/restore/confirm">
+      <input type="hidden" name="backup_id" value="{{ restore_plan.target.id }}">
+      <input type="hidden" name="confirm_restore" value="SI">
+
+      <div class="modal__foot">
+        <a class="btn" href="/backups"><i class="fa-solid fa-ban"></i> Cancelar</a>
+        <button class="btn restore strong" type="submit">
+          <i class="fa-solid fa-rotate-left"></i>
+          Restaurar backup
+        </button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
 
 {% if delete_plan %}
 <section class="modal is-open" id="modal-eliminar-backup">
