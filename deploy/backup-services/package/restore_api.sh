@@ -69,7 +69,7 @@ if ! flock -n 9; then
 fi
 
 mysql_args=(
-  --defaults-extra-file="$MY_RESTORE_CNF"
+  --defaults-file="$MY_RESTORE_CNF"
   --protocol=tcp
   -h "$MYSQL_HOST"
   -P "$MYSQL_PORT"
