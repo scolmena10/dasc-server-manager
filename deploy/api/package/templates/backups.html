@@ -392,6 +392,10 @@
               <td>{{ b.notes or "-" }}</td>
               <td>
                 <div class="row-actions">
+                  <a class="btn small download" href="/backups/download/{{ b.id }}">
+                    <i class="fa-solid fa-download"></i> Descargar
+                  </a>
+
                   <form method="post" action="/backups/restore/preview" style="display:inline;">
                     <input type="hidden" name="backup_id" value="{{ b.id }}">
                     <button type="submit" class="btn small restore">
