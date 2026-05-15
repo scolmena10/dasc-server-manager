@@ -364,6 +364,17 @@
   }
 }
 
+.btn.download {
+  background: #eef2ff;
+  color: #3730a3;
+  border-color: #c7d2fe;
+}
+
+.btn.download:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
 .btn.restore {
   background: #e0f2fe;
   color: #075985;
