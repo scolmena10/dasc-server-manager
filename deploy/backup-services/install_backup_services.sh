@@ -10,8 +10,11 @@ DB_HOST="${DB_HOST:-192.168.60.20}"
 DB_NAME="${DB_NAME:-employees}"
 DB_BACKUP_USER="${DB_BACKUP_USER:-dasc_backup}"
 DB_BACKUP_PASS="${DB_BACKUP_PASS:-dasc_backup_2026}"
+DB_RESTORE_USER="${DB_RESTORE_USER:-dasc_restore}"
+DB_RESTORE_PASS="${DB_RESTORE_PASS:-dasc_restore_2026}"
 
 INSTALL_BACKUP_SCRIPT="/usr/local/bin/backups_api.sh"
+INSTALL_RESTORE_SCRIPT="/usr/local/bin/restore_api.sh"
 INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
 SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
 SSHD_CONFIG="/etc/ssh/sshd_config"
@@ -37,6 +40,11 @@ fi
 
 if [[ ! -f "$PACKAGE_DIR/servicios_api.sh" ]]; then
   echo "ERROR: falta servicios_api.sh en package/"
+  exit 1
+fi
+
+if [[ ! -f "$PACKAGE_DIR/restore_api.sh" ]]; then
+  echo "ERROR: falta restore_api.sh en package/"
   exit 1
 fi
 
@@ -113,16 +121,19 @@ chmod 755 "${APP_HOME}"
 echo "==> Instalando scripts administrativos"
 sed -i 's/\r$//' "$PACKAGE_DIR/backups_api.sh"
 sed -i 's/\r$//' "$PACKAGE_DIR/servicios_api.sh"
+sed -i 's/\r$//' "$PACKAGE_DIR/restore_api.sh"
 
 cp "$PACKAGE_DIR/backups_api.sh" "$INSTALL_BACKUP_SCRIPT"
 cp "$PACKAGE_DIR/servicios_api.sh" "$INSTALL_SERVICES_SCRIPT"
+cp "$PACKAGE_DIR/restore_api.sh" "$INSTALL_RESTORE_SCRIPT"
 
-chown root:root "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
-chmod 755 "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT"
+chown root:root "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT" "$INSTALL_RESTORE_SCRIPT"
+chmod 755 "$INSTALL_BACKUP_SCRIPT" "$INSTALL_SERVICES_SCRIPT" "$INSTALL_RESTORE_SCRIPT"
 
 echo "==> Validando sintaxis de scripts"
 bash -n "$INSTALL_BACKUP_SCRIPT"
 bash -n "$INSTALL_SERVICES_SCRIPT"
+bash -n "$INSTALL_RESTORE_SCRIPT"
 
 echo "==> Creando ${APP_HOME}/.my.cnf"
 cat > "${APP_HOME}/.my.cnf" <<EOF2
@@ -133,6 +144,16 @@ host=${DB_HOST}
 EOF2
 chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.my.cnf"
 chmod 600 "${APP_HOME}/.my.cnf"
+
+echo "==> Creando ${APP_HOME}/.my_restore.cnf"
+cat > "${APP_HOME}/.my_restore.cnf" <<EOF2
+[client]
+user=${DB_RESTORE_USER}
+password=${DB_RESTORE_PASS}
+host=${DB_HOST}
+EOF2
+chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.my_restore.cnf"
+chmod 600 "${APP_HOME}/.my_restore.cnf"
 
 echo "==> Configurando sudoers para controlar servicios sin contraseña"
 cat > "${SUDOERS_FILE}" <<EOF2
@@ -163,14 +184,23 @@ systemctl --no-pager --full status ssh || true
 systemctl --no-pager --full status cron || true
 ls -l "${INSTALL_BACKUP_SCRIPT}"
 ls -l "${INSTALL_SERVICES_SCRIPT}"
+ls -l "${INSTALL_RESTORE_SCRIPT}"
 ls -ld "${BACKUP_DIR}"
 sudo -u "${APP_USER}" test -f "${APP_HOME}/.my.cnf" && echo ".my.cnf OK"
+sudo -u "${APP_USER}" test -f "${APP_HOME}/.my_restore.cnf" && echo ".my_restore.cnf OK"
 
 echo "==> Comprobando acceso a MariaDB remota"
 if sudo -u "${APP_USER}" mysql --defaults-extra-file="${APP_HOME}/.my.cnf" --protocol=tcp -h "${DB_HOST}" -e "SHOW DATABASES;" >/dev/null; then
   echo "Prueba mysql OK"
 else
   echo "AVISO: la prueba mysql ha fallado. Revisa DB_HOST, usuario o permisos."
+fi
+
+echo "==> Comprobando acceso de restauración a MariaDB remota"
+if sudo -u "${APP_USER}" mysql --defaults-extra-file="${APP_HOME}/.my_restore.cnf" --protocol=tcp -h "${DB_HOST}" -e "SHOW DATABASES;" >/dev/null; then
+  echo "Prueba mysql restore OK"
+else
+  echo "AVISO: la prueba mysql restore ha fallado. Revisa usuario dasc_restore o permisos."
 fi
 
 echo "==> Comprobando mysqldump"
@@ -199,6 +229,6 @@ echo "APP_USER=${APP_USER}"
 echo "DB_HOST=${DB_HOST}"
 echo "DB_NAME=${DB_NAME}"
 echo "Backups en: ${BACKUP_DIR}"
-echo "Scripts: ${INSTALL_BACKUP_SCRIPT} y ${INSTALL_SERVICES_SCRIPT}"
+echo "Scripts: ${INSTALL_BACKUP_SCRIPT}, ${INSTALL_RESTORE_SCRIPT} y ${INSTALL_SERVICES_SCRIPT}"
 echo "SSH listo para autenticación por contraseña y clave pública"
 echo "============================================"
