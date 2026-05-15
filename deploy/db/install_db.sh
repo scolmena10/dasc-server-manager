@@ -8,6 +8,8 @@ TEST_TABLE="${TEST_TABLE:-empleados_demo}"
 BACKUP_USER="${BACKUP_USER:-dasc_backup}"
 BACKUP_PASS="${BACKUP_PASS:-dasc_backup_2026}"
 BACKUP_ALLOWED_HOST="${BACKUP_ALLOWED_HOST:-192.168.60.30}"
+RESTORE_USER="${RESTORE_USER:-dasc_restore}"
+RESTORE_PASS="${RESTORE_PASS:-dasc_restore_2026}"
 
 MARIADB_CNF="/etc/mysql/mariadb.conf.d/50-server.cnf"
 
@@ -167,6 +169,17 @@ ON \`${DB_NAME}\`.* TO '${BACKUP_USER}'@'${BACKUP_ALLOWED_HOST}';
 GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE
 ON *.* TO '${BACKUP_USER}'@'${BACKUP_ALLOWED_HOST}';
 
+CREATE USER IF NOT EXISTS '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}' IDENTIFIED BY '${RESTORE_PASS}';
+
+GRANT ALL PRIVILEGES
+ON `${DB_NAME}`.* TO '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';
+
+# Para reproducir binlogs generados por mysqlbinlog/mariadb-binlog durante restauraciones.
+# En MariaDB/Ubuntu 22.04 SUPER sigue siendo válido; si una versión futura no lo acepta,
+# el instalador continuará y se podrá ajustar el privilegio manualmente.
+GRANT RELOAD, PROCESS, REPLICATION CLIENT, REPLICATION SLAVE, SUPER
+ON *.* TO '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';
+
 FLUSH PRIVILEGES;
 SQL
 
@@ -179,6 +192,7 @@ ss -lntp | grep -E '(:22|:3306)' || true
 mariadb -e "SELECT User, Host FROM mysql.user WHERE User='${BACKUP_USER}';"
 mariadb -e "SHOW DATABASES LIKE '${DB_NAME}';"
 mariadb -e "SHOW GRANTS FOR '${BACKUP_USER}'@'${BACKUP_ALLOWED_HOST}';" || true
+mariadb -e "SHOW GRANTS FOR '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';" || true
 mariadb -e "SHOW VARIABLES LIKE 'log_bin';"
 mariadb -e "SHOW MASTER STATUS;"
 mariadb -e "SHOW BINARY LOGS;"
@@ -189,6 +203,7 @@ echo "Base de datos instalada correctamente"
 echo "DB_NAME=${DB_NAME}"
 echo "TEST_TABLE=${TEST_TABLE}"
 echo "BACKUP_USER=${BACKUP_USER}"
+echo "RESTORE_USER=${RESTORE_USER}"
 echo "BACKUP_ALLOWED_HOST=${BACKUP_ALLOWED_HOST}"
 echo "Binary logs: ${BINLOG_BASENAME}"
 echo "Puerto SSH esperado: 22"
