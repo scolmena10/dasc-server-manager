@@ -2377,19 +2377,28 @@ def is_ok(output: str) -> bool:
         return False
 
     o = output.lower()
+
+    if "error" in o:
+        return False
+
     return (
         o.startswith("ok")
+        or " ok:" in o
+        or "\nok:" in o
         or "ok: backup" in o
+        or "ok: restauración" in o
+        or "ok: restauracion" in o
+        or "restauración completada" in o
+        or "restauracion completada" in o
         or "backup full creado" in o
         or "backup incremental creado" in o
         or "backup differential creado" in o
         or "backup diferencial creado" in o
+        or "backups eliminados correctamente" in o
         or "creado en" in o
         or "backup completed" in o
         or "success" in o
     )
-
-
 
 
 @app.post("/backups/automation/create")
