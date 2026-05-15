@@ -14,8 +14,8 @@ DB_RESTORE_USER="${DB_RESTORE_USER:-dasc_restore}"
 DB_RESTORE_PASS="${DB_RESTORE_PASS:-dasc_restore_2026}"
 
 INSTALL_BACKUP_SCRIPT="/usr/local/bin/backups_api.sh"
-INSTALL_RESTORE_SCRIPT="/usr/local/bin/restore_api.sh"
 INSTALL_SERVICES_SCRIPT="/usr/local/bin/servicios_api.sh"
+INSTALL_RESTORE_SCRIPT="/usr/local/bin/restore_api.sh"
 SUDOERS_FILE="/etc/sudoers.d/dasc-servicios"
 SSHD_CONFIG="/etc/ssh/sshd_config"
 
@@ -145,6 +145,7 @@ EOF2
 chown "${APP_USER}:${APP_GROUP}" "${APP_HOME}/.my.cnf"
 chmod 600 "${APP_HOME}/.my.cnf"
 
+
 echo "==> Creando ${APP_HOME}/.my_restore.cnf"
 cat > "${APP_HOME}/.my_restore.cnf" <<EOF2
 [client]
@@ -196,11 +197,11 @@ else
   echo "AVISO: la prueba mysql ha fallado. Revisa DB_HOST, usuario o permisos."
 fi
 
-echo "==> Comprobando acceso de restauración a MariaDB remota"
+echo "==> Comprobando usuario de restauración"
 if sudo -u "${APP_USER}" mysql --defaults-extra-file="${APP_HOME}/.my_restore.cnf" --protocol=tcp -h "${DB_HOST}" -e "SHOW DATABASES;" >/dev/null; then
-  echo "Prueba mysql restore OK"
+  echo "Prueba usuario restore OK"
 else
-  echo "AVISO: la prueba mysql restore ha fallado. Revisa usuario dasc_restore o permisos."
+  echo "AVISO: la prueba del usuario restore ha fallado. Revisa DB_HOST, usuario o permisos."
 fi
 
 echo "==> Comprobando mysqldump"

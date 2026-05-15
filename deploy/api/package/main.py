@@ -1056,18 +1056,11 @@ def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> d
     }
 
 
-def plan_restauracion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
-    """
-    Calcula la cadena de restauración necesaria para llegar a un backup concreto.
 
-    Reglas:
-    - Full: se restaura solo esa copia.
-    - Differential: se restaura su full base + diferencial seleccionado.
-    - Incremental: se reconstruye la cadena siguiendo base_id hasta llegar al full.
-    """
+def plan_restauracion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
+    """Calcula la cadena de restauración desde un full hasta el backup seleccionado."""
 
     target_id = str(backup_id)
-
     by_id: dict[str, dict[str, str]] = {}
 
     for item in history:
@@ -1106,7 +1099,6 @@ def plan_restauracion_backups(backup_id: int, history: list[dict[str, str]]) -> 
     items = list(reversed(reverse_chain))
     full_item = items[0]
     target = by_id[target_id]
-
     db = full_item.get("db", "-")
 
     for item in items:
@@ -1131,7 +1123,6 @@ def restaurar_backup_remoto(backup_id: int) -> dict[str, Any]:
         SCRIPT_RESTORE,
         [str(backup_id), "/home/dasc/backups", "SI"],
     )
-
 
 def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
 
@@ -2601,6 +2592,7 @@ def backups_automation_delete(
     )
 
 
+
 @app.post("/backups/restore/preview")
 def backups_restore_preview(
     request: Request,
@@ -2691,7 +2683,6 @@ def backups_restore_confirm(
         url=f"/backups?ok={ok}&msg={quote(result['text'])}",
         status_code=303,
     )
-
 
 @app.post("/backups/delete/preview")
 def backups_delete_preview(
