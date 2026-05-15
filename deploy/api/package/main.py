@@ -1162,9 +1162,21 @@ def validar_ruta_backup_descarga(remote_path: str) -> str:
 
 
 def leer_backup_remoto(remote_path: str) -> dict[str, Any]:
-    """Lee un archivo de backup remoto en binario usando SSH."""
+    """Lee un archivo de backup remoto en binario usando SSH.
+
+    Importante: el comando remoto se envía como una única cadena.
+    Si se manda como ["bash", "-lc", "..."] a ssh, OpenSSH lo recompone
+    sin conservar las comillas y el test puede fallar aunque el archivo exista.
+    """
 
     safe_path = validar_ruta_backup_descarga(remote_path)
+    quoted_path = shlex.quote(safe_path)
+
+    remote_cmd = (
+        f"test -f {quoted_path} && "
+        f"test -r {quoted_path} && "
+        f"cat -- {quoted_path}"
+    )
 
     cmd = [
         "ssh",
@@ -1173,22 +1185,32 @@ def leer_backup_remoto(remote_path: str) -> dict[str, Any]:
         "-o", "StrictHostKeyChecking=yes",
         "-o", "UserKnownHostsFile=/opt/dasc/api/.ssh/known_hosts_dasc",
         f"{USUARIO}@{SERVIDOR_BACKUPS}",
-        "bash",
-        "-lc",
-        f"test -f {shlex.quote(safe_path)} && cat -- {shlex.quote(safe_path)}",
+        remote_cmd,
     ]
 
     res = subprocess.run(cmd, capture_output=True)
     err = (res.stderr or b"").decode("utf-8", errors="replace").strip()
 
+    if res.returncode == 0:
+        return {
+            "ok": True,
+            "code": 0,
+            "path": safe_path,
+            "content": res.stdout or b"",
+            "stderr": err,
+            "text": "OK",
+        }
+
+    detail = err or "No se pudo leer el archivo remoto"
     return {
-        "ok": res.returncode == 0,
+        "ok": False,
         "code": res.returncode,
         "path": safe_path,
-        "content": res.stdout or b"",
+        "content": b"",
         "stderr": err,
-        "text": "OK" if res.returncode == 0 else f"ERROR ({res.returncode}): {err or 'No se pudo leer el archivo remoto'}",
+        "text": f"ERROR ({res.returncode}): {detail}",
     }
+
 
 def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
 
