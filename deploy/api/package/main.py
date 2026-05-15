@@ -9,6 +9,7 @@ import json
 import sqlite3
 import subprocess
 import shlex
+import posixpath
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -18,7 +19,7 @@ from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, Response
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -1123,6 +1124,71 @@ def restaurar_backup_remoto(backup_id: int) -> dict[str, Any]:
         SCRIPT_RESTORE,
         [str(backup_id), "/home/dasc/backups", "SI"],
     )
+
+
+def buscar_backup_por_id(backup_id: int, history: list[dict[str, str]]) -> dict[str, str]:
+    """Busca una copia concreta dentro del historial ya cargado."""
+
+    target_id = str(backup_id).strip()
+
+    for item in history:
+        if str(item.get("id", "")).strip() == target_id:
+            return item
+
+    raise ValueError(f"No existe ningún backup con ID={backup_id}.")
+
+
+def validar_ruta_backup_descarga(remote_path: str) -> str:
+    """Valida que la ruta descargada pertenece al directorio de backups permitido."""
+
+    raw_path = (remote_path or "").strip()
+
+    if not raw_path:
+        raise ValueError("La copia seleccionada no tiene archivo asociado.")
+
+    if "\x00" in raw_path:
+        raise ValueError("Ruta de backup no válida.")
+
+    normalized = posixpath.normpath(raw_path)
+    allowed_root = "/home/dasc/backups"
+
+    if normalized == allowed_root:
+        raise ValueError("No se puede descargar el directorio de backups completo.")
+
+    if not normalized.startswith(f"{allowed_root}/"):
+        raise ValueError("Ruta de backup no permitida para descarga.")
+
+    return normalized
+
+
+def leer_backup_remoto(remote_path: str) -> dict[str, Any]:
+    """Lee un archivo de backup remoto en binario usando SSH."""
+
+    safe_path = validar_ruta_backup_descarga(remote_path)
+
+    cmd = [
+        "ssh",
+        "-i", "/opt/dasc/api/.ssh/id_rsa_dasc",
+        "-o", "BatchMode=yes",
+        "-o", "StrictHostKeyChecking=yes",
+        "-o", "UserKnownHostsFile=/opt/dasc/api/.ssh/known_hosts_dasc",
+        f"{USUARIO}@{SERVIDOR_BACKUPS}",
+        "bash",
+        "-lc",
+        f"test -f {shlex.quote(safe_path)} && cat -- {shlex.quote(safe_path)}",
+    ]
+
+    res = subprocess.run(cmd, capture_output=True)
+    err = (res.stderr or b"").decode("utf-8", errors="replace").strip()
+
+    return {
+        "ok": res.returncode == 0,
+        "code": res.returncode,
+        "path": safe_path,
+        "content": res.stdout or b"",
+        "stderr": err,
+        "text": "OK" if res.returncode == 0 else f"ERROR ({res.returncode}): {err or 'No se pudo leer el archivo remoto'}",
+    }
 
 def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
 
@@ -2600,6 +2666,57 @@ def backups_automation_delete(
         status_code=303,
     )
 
+
+
+@app.get("/backups/download/{backup_id}")
+def backups_download(
+    request: Request,
+    backup_id: int,
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    history = cargar_historial_backups(limit=1000)
+
+    try:
+        item = buscar_backup_por_id(backup_id, history)
+        remote_path = validar_ruta_backup_descarga(item.get("file", ""))
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    result = leer_backup_remoto(remote_path)
+
+    if not result.get("ok"):
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(result.get('text', 'No se pudo descargar el backup'))}",
+            status_code=303,
+        )
+
+    filename = item.get("filename") or posixpath.basename(remote_path) or f"backup-{backup_id}.sql"
+    filename = filename.replace('"', "").replace("'", "").strip() or f"backup-{backup_id}.sql"
+
+    log_event(
+        tipo="backup",
+        resultado="OK",
+        usuario=request.session.get("user", "anon"),
+        ip_origen=request.client.host if request.client else None,
+        recurso=f"GET /backups/download/{backup_id}",
+        detalle=f"Descarga de backup ID={backup_id}: {filename}",
+    )
+
+    headers = {
+        "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}",
+        "X-DASC-Backup-ID": str(backup_id),
+    }
+
+    return Response(
+        content=result["content"],
+        media_type="application/octet-stream",
+        headers=headers,
+    )
 
 
 @app.post("/backups/restore/preview")
