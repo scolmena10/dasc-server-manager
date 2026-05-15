@@ -145,7 +145,7 @@ echo "==> Habilitando y reiniciando MariaDB"
 systemctl enable --now mariadb
 systemctl restart mariadb
 
-echo "==> Creando base de datos, tabla demo y usuario de backup"
+echo "==> Creando base de datos, tabla demo y usuarios de backup/restauración"
 mariadb <<SQL
 CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\`;
 
@@ -172,13 +172,7 @@ ON *.* TO '${BACKUP_USER}'@'${BACKUP_ALLOWED_HOST}';
 CREATE USER IF NOT EXISTS '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}' IDENTIFIED BY '${RESTORE_PASS}';
 
 GRANT ALL PRIVILEGES
-ON `${DB_NAME}`.* TO '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';
-
-# Para reproducir binlogs generados por mysqlbinlog/mariadb-binlog durante restauraciones.
-# En MariaDB/Ubuntu 22.04 SUPER sigue siendo válido; si una versión futura no lo acepta,
-# el instalador continuará y se podrá ajustar el privilegio manualmente.
-GRANT RELOAD, PROCESS, REPLICATION CLIENT, REPLICATION SLAVE, SUPER
-ON *.* TO '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';
+ON \`${DB_NAME}\`.* TO '${RESTORE_USER}'@'${BACKUP_ALLOWED_HOST}';
 
 FLUSH PRIVILEGES;
 SQL
