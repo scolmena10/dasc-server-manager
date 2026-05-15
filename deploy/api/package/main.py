@@ -55,6 +55,7 @@ TERMINAL_MAX_COMMAND_LENGTH = int(os.getenv("TERMINAL_MAX_COMMAND_LENGTH", "4000
 
 SCRIPT_SERVICIOS = os.getenv("SCRIPT_SERVICIOS", "/usr/local/bin/servicios_api.sh")
 SCRIPT_BACKUPS = os.getenv("SCRIPT_BACKUPS", "/usr/local/bin/backups_api.sh")
+SCRIPT_RESTORE = os.getenv("SCRIPT_RESTORE", "/usr/local/bin/restore_api.sh")
 BACKUP_AUTOMATION_MARKER = "# DASC_BACKUP_AUTO"
 BACKUP_AUTOMATION_LOG = os.getenv("BACKUP_AUTOMATION_LOG", "/home/dasc/backups/.dasc/cron.log")
 
@@ -1053,6 +1054,83 @@ def plan_eliminacion_backups(backup_id: int, history: list[dict[str, str]]) -> d
         "has_dependents": len(ids_to_delete) > 1,
         "dependents_count": max(0, len(ids_to_delete) - 1),
     }
+
+
+def plan_restauracion_backups(backup_id: int, history: list[dict[str, str]]) -> dict[str, Any]:
+    """
+    Calcula la cadena de restauración necesaria para llegar a un backup concreto.
+
+    Reglas:
+    - Full: se restaura solo esa copia.
+    - Differential: se restaura su full base + diferencial seleccionado.
+    - Incremental: se reconstruye la cadena siguiendo base_id hasta llegar al full.
+    """
+
+    target_id = str(backup_id)
+
+    by_id: dict[str, dict[str, str]] = {}
+
+    for item in history:
+        item_id = str(item.get("id", "")).strip()
+        if item_id:
+            by_id[item_id] = item
+
+    if target_id not in by_id:
+        raise ValueError(f"No existe ningún backup con ID={backup_id}.")
+
+    reverse_chain: list[dict[str, str]] = []
+    visited: set[str] = set()
+    current_id = target_id
+
+    while True:
+        if current_id in visited:
+            raise ValueError(f"Se ha detectado un ciclo en la cadena de restauración en ID={current_id}.")
+
+        visited.add(current_id)
+
+        item = by_id.get(current_id)
+        if not item:
+            raise ValueError(f"La cadena de restauración está rota. Falta la copia ID={current_id}.")
+
+        reverse_chain.append(item)
+
+        if item.get("type") == "full":
+            break
+
+        base_id = str(item.get("base_id", "") or "").strip()
+        if not base_id:
+            raise ValueError(f"La copia ID={current_id} no es completa y no tiene base_id.")
+
+        current_id = base_id
+
+    items = list(reversed(reverse_chain))
+    full_item = items[0]
+    target = by_id[target_id]
+
+    db = full_item.get("db", "-")
+
+    for item in items:
+        if item.get("db") != db:
+            raise ValueError("La cadena de restauración mezcla bases de datos diferentes.")
+
+    return {
+        "target": target,
+        "items": items,
+        "ids": [str(item.get("id")) for item in items],
+        "ids_csv": ", ".join([str(item.get("id")) for item in items]),
+        "db": db,
+        "full": full_item,
+        "has_chain": len(items) > 1,
+        "chain_count": len(items),
+    }
+
+
+def restaurar_backup_remoto(backup_id: int) -> dict[str, Any]:
+    return ssh_run(
+        SERVIDOR_BACKUPS,
+        SCRIPT_RESTORE,
+        [str(backup_id), "/home/dasc/backups", "SI"],
+    )
 
 
 def eliminar_backups_cascada_remoto(ids: list[str]) -> dict[str, Any]:
@@ -2232,6 +2310,7 @@ def backups(request: Request):
     context["backup_history"] = cargar_historial_backups()
     context["backup_automations"] = cargar_automatizaciones_backups()
     context["delete_plan"] = None
+    context["restore_plan"] = None
 
     return templates.TemplateResponse(request, "backups.html", context)
 
@@ -2522,6 +2601,98 @@ def backups_automation_delete(
     )
 
 
+@app.post("/backups/restore/preview")
+def backups_restore_preview(
+    request: Request,
+    backup_id: int = Form(...),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    history = cargar_historial_backups(limit=1000)
+
+    try:
+        restore_plan = plan_restauracion_backups(backup_id, history)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    context = get_common_context(request)
+    context["ok"] = None
+    context["msg"] = None
+    context["cacti_url"] = CACTI_URL
+    context["backup_history"] = history[:50]
+    context["backup_automations"] = cargar_automatizaciones_backups()
+    context["delete_plan"] = None
+    context["restore_plan"] = restore_plan
+
+    return templates.TemplateResponse(request, "backups.html", context)
+
+
+@app.post("/backups/restore/confirm")
+def backups_restore_confirm(
+    request: Request,
+    backup_id: int = Form(...),
+    confirm_restore: str = Form(""),
+):
+    if not has_permission(request, "backups"):
+        return permission_redirect()
+
+    if confirm_restore != "SI":
+        return RedirectResponse(
+            url="/backups?ok=0&msg=Restauracion+cancelada",
+            status_code=303,
+        )
+
+    history = cargar_historial_backups(limit=1000)
+
+    try:
+        restore_plan = plan_restauracion_backups(backup_id, history)
+    except ValueError as exc:
+        return RedirectResponse(
+            url=f"/backups?ok=0&msg={quote(str(exc))}",
+            status_code=303,
+        )
+
+    result = restaurar_backup_remoto(backup_id)
+    ok = 1 if result["ok"] and is_ok(result["text"]) else 0
+
+    if ok:
+        emit_alert(
+            "backup.restore.ok",
+            "info",
+            "Backup restaurado",
+            (
+                "<b>Backup restaurado</b>\n"
+                f"ID objetivo: {backup_id}\n"
+                f"BD: {restore_plan.get('db', '-')}\n"
+                f"Cadena: {restore_plan.get('ids_csv', '-')}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}"
+            ),
+            "backups",
+        )
+    else:
+        emit_alert(
+            "backup.restore.error",
+            "critical",
+            "Error al restaurar backup",
+            (
+                "<b>Error al restaurar backup</b>\n"
+                f"ID objetivo: {backup_id}\n"
+                f"Servidor: {SERVIDOR_BACKUPS}\n"
+                f"Detalle: {result['text']}"
+            ),
+            "backups",
+        )
+
+    return RedirectResponse(
+        url=f"/backups?ok={ok}&msg={quote(result['text'])}",
+        status_code=303,
+    )
+
+
 @app.post("/backups/delete/preview")
 def backups_delete_preview(
     request: Request,
@@ -2547,6 +2718,7 @@ def backups_delete_preview(
     context["backup_history"] = history[:50]
     context["backup_automations"] = cargar_automatizaciones_backups()
     context["delete_plan"] = delete_plan
+    context["restore_plan"] = None
 
     return templates.TemplateResponse(request, "backups.html", context)
 
